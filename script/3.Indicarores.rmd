@@ -1,0 +1,467 @@
+---
+title: "Untitled"
+author: "José Fernando Zea"
+date: "6/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# #https://www.cepal.org/sites/default/files/presentations/2017-05-betty-pastor-bo.pdf
+
+
+```{r, warning=FALSE, message=FALSE}
+library(arrow)
+library(dplyr)
+library(labelled)
+```
+
+
+# Creación de NBI
+
+
+```{r}
+setwd("../output/parquet_31enero")
+personas <- open_dataset("personas")
+viviendas <- open_dataset("viviendas")
+```
+
+```{r}
+setwd("../output/etiquetas_31enero")
+personas_etiquetas <- readRDS("personas_etiquetas.rds")
+viviendas_etiquetas <- readRDS("viviendas_etiquetas.rds")
+
+```
+
+
+```{r}
+personas <- personas %>% mutate(I_BC_VIV = paste0("X", as.character(I_BC_VIV)))
+```
+
+Filtramos con las viviendas ocupadas con personas presentes
+
+```{r}
+viviendas <- viviendas %>% filter(P02_CONDOCUPA == 1)
+```
+
+
+# Materiales de la vivienda
+
+Por otro lado la categoría del material de los pisos es:
+
+```{r}
+viviendas_etiquetas$P06_PISOS %>% val_labels()
+```
+
+Las categorías de techos son:
+
+```{r}
+viviendas_etiquetas$P05_TECHO %>% val_labels()
+```
+
+El hogar presenta carencia si presenta al menos dos de las siguientes condiciones:
+
+* Paredes de Adobe, tapial (sin revocar), tabique, quinche, piedra, madera, caña, palma, tronco, y otro (categoría 2 a 7)
+* Pisos de tierra y otro (categoría 1 y 9)
+* Techos de Paja, palma, caña, barro y otro (categorías 4 y 5)
+
+
+```{r}
+consulta_carenciaCalidadViv <- viviendas %>% collect() %>% mutate(carencia_pared = as.numeric(P03_PARED %in% 3:7 |
+                                                     (P03_PARED == 2 & P04_REVOQ  == 2)),
+                                                     carencia_pisos = as.numeric(P06_PISOS %in% c(1, 9)), 
+                                                     carencia_techos = P05_TECHO %in% 4:5,
+                                                    num_carencias_calidad_vida = carencia_pared + carencia_pisos +                                                              carencia_techos, CARENCIA_CALIDADVIVIENDA =                
+                                                    ifelse(num_carencias_calidad_vida >= 2, 1, 0)) %>%
+  select(I_BC_VIV, CARENCIA_CALIDADVIVIENDA) 
+
+```
+
+
+# Indicador de hacinamiento
+
+Se utilizan dos variables el total de habitaciones:
+
+```{r}
+viviendas_etiquetas$P14_HABITAC %>% var_label()
+```
+
+También el total de personas que habita en la vivienda:
+
+```{r}
+viviendas_etiquetas$TOT_PER_VIV %>% var_label()
+```
+
+
+```{r}
+consulta_hacinamiento  <- viviendas %>% select(I_BC_VIV, P14_HABITAC, TOT_PER_VIV) %>%
+                          mutate(hacinamiento = TOT_PER_VIV / P14_HABITAC,
+                                HACINAMIENTO = as.numeric(hacinamiento > 2.5)) %>%
+                           select(I_BC_VIV, HACINAMIENTO) %>% collect()
+```
+
+
+# Disponibilidad de agua potable
+
+La carencia disponibilidad de agua potable se mide con la siguiente variable:
+```{r}
+viviendas_etiquetas$P07_AGUAPRO %>% var_label()
+
+```
+
+```{r}
+viviendas_etiquetas$P07_AGUAPRO %>% val_labels()
+```
+
+Para el caso de la parte urbana la carencia se da si no se disponería de cañería de red.En el caso de la ruralidad si se obtiene a partir de lluvia, lago laguna curichi.
+
+```{r}
+consulta_abastecAgua <- viviendas %>% select(I_BC_VIV, URBRUR,  P07_AGUAPRO) %>% 
+                        mutate(CARENCIA_ABASTECAGUA  = ifelse(URBRUR  == 1 & P07_AGUAPRO %in% 2:7, 1, 
+                                                              ifelse(URBRUR  == 2 & P07_AGUAPRO %in% 6:7, 1, 0)))  %>%
+                        select(I_BC_VIV, CARENCIA_ABASTECAGUA) %>% collect()
+```
+
+
+
+
+# Acceso a servicios sanitarios para el desecho de excretas
+El servicio sanitario se aborda con las siguientes variables:
+
+```{r}
+viviendas_etiquetas$P09_SERVSANIT %>% var_label()
+```
+```{r}
+viviendas_etiquetas$P09_SERVSANIT %>% val_labels()
+
+```
+
+```{r}
+viviendas_etiquetas$P10_DESAGUE %>% val_labels()
+```
+
+
+```{r}
+consulta_servSanit <- viviendas %>% collect() %>% select(I_BC_VIV,URBRUR,  P09_SERVSANIT, P10_DESAGUE) %>% 
+  mutate(CARENCIA_SERVSANITARIO  = ifelse(URBRUR == 1 & P09_SERVSANIT == 3 & P10_DESAGUE %in% 4:6, 1, 
+                                        ifelse(URBRUR == 2 & (P09_SERVSANIT == 3 | P10_DESAGUE%in% 5:6), 1, 0)))  %>%
+  select(I_BC_VIV, CARENCIA_SERVSANITARIO)
+```
+
+
+
+# Asistencia escolar
+
+Las variables que se utilizan para calcular este indicador son:
+
+```{r}
+personas_etiquetas$P25_EDAD %>% var_label()
+```
+
+```{r}
+personas_etiquetas$P36_ASISTE %>% var_label()
+```
+
+```{r}
+personas_etiquetas$P36_ASISTE %>% val_labels()
+
+```
+
+```{r}
+personas_etiquetas$P35_LEER %>% val_labels()
+```
+
+
+Educación: a) Personas entre 7 y 16 años que no asisten a una unidad de educación
+formal; b) Alguna persona de 10 o más años que no sepa leer y escribir; c) Personas que
+no hayan aprobado determinado número de años, de acuerdo con su edad.
+
+```{r, eval = FALSE}
+consulta_asistencEscolar <- personas %>% filter(P25_EDAD >= 7) %>% select(I_BC_VIV, P25_EDAD, P36_ASISTE, P37B_CURSONUE, P37B_CURSO, P37A_NIVEL) %>% collect() %>% 
+  mutate(asistencia_escolar = as.numeric(P25_EDAD >= 7 & P25_EDAD <= 16 & P36_ASISTE %in% 4),  
+       analfabetismo = as.numeric(P25_EDAD > 18 & (P37A_NIVEL  %in% c(1:4, 9) |  (P37A_NIVEL == 5 & P37B_CURSONUE  < 3)) |
+         (P37A_NIVEL == 7 & P37B_CURSONUE  < 8) | (P37A_NIVEL == 10 & P37B_CURSONUE  < 2)),
+       ESCOLARIDAD = ifelse(P37A_NIVEL  == 1, 0, ifelse(P37A_NIVEL  == 2, 0,
+                            ifelse(P37A_NIVEL == 3, 0,
+                            ifelse(P37A_NIVEL == 4, P37B_CURSO,
+                            ifelse(P37A_NIVEL == 5, P37B_CURSO + 5,
+                            ifelse(P37A_NIVEL == 6, P37B_CURSO + 8,
+                            ifelse(P37A_NIVEL == 7, P37B_CURSO,
+                            ifelse(P37A_NIVEL == 8, P37B_CURSO + 8,
+                            ifelse(P37A_NIVEL == 9, P37B_CURSO,
+                            ifelse(P37A_NIVEL == 10, P37B_CURSO + 6,
+                            ifelse(P37A_NIVEL == 11, P37B_CURSO + 12,  
+                            ifelse(P37A_NIVEL == 12, P37B_CURSO + 12,
+                            ifelse(P37A_NIVEL == 13, P37B_CURSO + 16,
+                            ifelse(P37A_NIVEL == 14, P37B_CURSO + 18,
+                            ifelse(P37A_NIVEL == 15, P37B_CURSO + 12,
+                            ifelse(P37A_NIVEL == 16, P37B_CURSO + 12,
+                            ifelse(P37A_NIVEL == 17, P37B_CURSO + 12, NA))))))))))))))))))
+
+consulta_asistencEscolar <- consulta_asistencEscolar %>% mutate(
+                            rezago_escolar = as.numeric(P25_EDAD >= 6 & P25_EDAD <= 21 & P36_ASISTE == 1 &        
+                            ((P25_EDAD-ESCOLARIDAD) > 7)))
+
+consulta_asistencEscolar <- consulta_asistencEscolar %>% mutate(
+                           CARENCIA_ESCOLAR = as.numeric(asistencia_escolar ==1 | analfabetismo == 1| rezago_escolar == 1)
+                           )
+
+consulta_asistencEscolar <- consulta_asistencEscolar %>% 
+  group_by(I_BC_VIV) %>% 
+  summarise(CARENCIA_ESCOLAR = sum(CARENCIA_ESCOLAR, na.rm = TRUE)) %>% 
+  mutate(CARENCIA_ESCOLAR = ifelse(CARENCIA_ESCOLAR >= 0, 1, 0)) 
+```
+
+
+# Insumos energéticos
+
+```{r}
+consulta_energia <- viviendas %>% select(I_BC_VIV, P11_ENERGIA, P12_COMBUS) %>% mutate(CARENCIA_ENERGIA = ifelse(P11_ENERGIA  == 4 |
+                                           P12_COMBUS %in% c(3:8), 1, 0)) %>% 
+  select(I_BC_VIV, CARENCIA_ENERGIA) %>%
+  collect()
+
+```
+
+
+
+# Condiciones ocupacionales
+
+
+Las variables que se utilizaron en este módulo fueron:
+
+```{r}
+var_label(personas_etiquetas$P39_TRABAJO)
+```
+
+
+```{r}
+val_labels(personas_etiquetas$P39_TRABAJO)
+```
+
+```{r}
+var_label(personas_etiquetas$P40_QUEHIZO)
+```
+
+```{r}
+val_labels(personas_etiquetas$P40_QUEHIZO)
+```
+
+
+```{r}
+var_label(personas_etiquetas$P41_BUSCO)
+
+```
+
+```{r}
+val_labels(personas_etiquetas$P41_BUSCO)
+
+```
+
+
+
+```{r}
+consulta_ocupac <- personas %>% select(I_BC_VIV, ID_BC_PERS, URBRUR_P, P25_EDAD, P39_TRABAJO, P40_QUEHIZO,  P41_BUSCO) %>% collect() %>%  mutate(PET = ifelse(URBRUR_P %in% 1:2 & P25_EDAD >= 15, 1, 0)) # Población edad de trabajar
+
+
+consulta_ocupac <- consulta_ocupac %>% mutate(PEA = as.numeric(PET == 1 & (P39_TRABAJO == 1 | # Trabajaron 
+                                                 (PET == 1 & P39_TRABAJO == 2 & P40_QUEHIZO %in% 1:4) | # No trabajó la semana pasada pero tiene trabajo
+                                                 (PET == 1 & P39_TRABAJO == 2 &  P41_BUSCO %in% c(1, 2)))),
+                                PEA = ifelse(PET == 0, NA, PEA),
+                                ) # No trabajo y busco trabajo (con trabajo anterior o por primera vez)
+
+
+consulta_ocupac <- consulta_ocupac %>% mutate(Desocupados = as.numeric(PEA == 1 & P39_TRABAJO == 2 & (P41_BUSCO %in% c(1, 2))),
+                            Ocupados = as.numeric(PEA == 1 & (P39_TRABAJO == 1 | (P39_TRABAJO == 2 & P40_QUEHIZO %in% 1:4))
+                                                  )) # No trabajo
+
+consulta_ocupac <-  consulta_ocupac %>% select(I_BC_VIV, ID_BC_PERS, PET, PEA, Desocupados, Ocupados) 
+consulta_ocupac <- consulta_ocupac %>% mutate(Desocupados  = ifelse(PET == 0, NA, Desocupados ))
+```
+
+
+# Demograficas
+
+
+```{r}
+consulta_demog <- personas %>% mutate(edad_0_5 = ifelse(P25_EDAD < 5, 1, 0),
+                 edad_5_10 = ifelse(P25_EDAD >= 5 & P25_EDAD < 10, 1, 0),
+                 edad_10_15 = ifelse(P25_EDAD >= 10 & P25_EDAD < 15, 1, 0),                           edad_15_20 = ifelse(P25_EDAD >= 15 & P25_EDAD < 20, 1, 0),
+                 edad_20_25 = ifelse(P25_EDAD >= 20 & P25_EDAD < 25, 1, 0),
+                 edad_25_30 = ifelse(P25_EDAD >= 25 & P25_EDAD < 30, 1, 0),
+                 edad_30_35 = ifelse(P25_EDAD >= 30 & P25_EDAD < 35, 1, 0),
+                 edad_35_40 = ifelse(P25_EDAD >= 35 & P25_EDAD < 40, 1, 0),
+                 edad_40_45 = ifelse(P25_EDAD >= 40 & P25_EDAD < 45, 1, 0),
+                 edad_45_50 = ifelse(P25_EDAD >= 45 & P25_EDAD < 50, 1, 0),
+                 edad_50_55 = ifelse(P25_EDAD >= 50 & P25_EDAD < 55, 1, 0),
+                 edad_55_60 = ifelse(P25_EDAD >= 55 & P25_EDAD < 60, 1, 0),
+                 edad_60_65 = ifelse(P25_EDAD >= 60 & P25_EDAD < 65, 1, 0),
+                 edad_65_70 = ifelse(P25_EDAD >= 65 & P25_EDAD < 70, 1, 0),
+                 edad_70_75 = ifelse(P25_EDAD >= 70 & P25_EDAD < 75, 1, 0),
+                 edad_75_80 = ifelse(P25_EDAD >= 75 & P25_EDAD < 80, 1, 0),
+                 edad_80_85 = ifelse(P25_EDAD >= 80 & P25_EDAD < 85, 1, 0),
+                 edad_85Mas = ifelse(P25_EDAD >= 85, 1, 0),
+                 sexo_hombre = ifelse(P24_SEXO == 1, 1, 0)
+                                     
+                ) %>% select(I_BC_VIV, ID_BC_PERS, P25_EDAD, edad_5_10, edad_10_15,  edad_15_20, edad_20_25, edad_25_30, edad_30_35, edad_35_40, edad_40_45,
+                             edad_45_50, edad_50_55, edad_55_60, edad_60_65, edad_65_70, edad_70_75, edad_75_80,
+                             edad_80_85, edad_85Mas, sexo_hombre
+                             )
+```
+
+
+
+# Selección de variables
+
+
+```{r}
+nrow(consulta_carenciaCalidadViv)
+nrow(consulta_hacinamiento)
+nrow(consulta_abastecAgua)
+nrow(consulta_servSanit)
+nrow(consulta_energia)
+
+nrow(consulta_asistencEscolar)
+
+nrow(consulta_ocupac)
+nrow(consulta_demog)
+```
+
+
+Integración de tablas
+
+```{r}
+
+consulta_hogar_nbi <- inner_join(consulta_carenciaCalidadViv, consulta_hacinamiento)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_abastecAgua)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_servSanit)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_energia)
+#consulta_hogar_nbi <- left_join(consulta_hogar_nbi, consulta_asistencEscolar)
+
+nrow(consulta_ocupac)
+nrow(consulta_demog)
+```
+
+Integrarle la información de UPM
+
+```{r}
+consulta_hogar_nbi2 <- left_join(consulta_hogar_nbi %>% collect(),
+                                   select(viviendas, I_BC_VIV, ID_UPM, URBRUR) %>% collect())
+```
+
+
+```{r}
+estadisticas_indica <- consulta_hogar_nbi2  %>% 
+  summarise(CARENCIA_CALIDADVIVIENDA = mean(CARENCIA_CALIDADVIVIENDA),
+            HACINAMIENTO = mean(HACINAMIENTO),
+            CARENCIA_ABASTECAGUA = mean(CARENCIA_ABASTECAGUA),
+            CARENCIA_SERVSANITARIO = mean(CARENCIA_SERVSANITARIO),
+            CARENCIA_ENERGIA = mean(CARENCIA_ENERGIA))
+            
+                                                          
+```
+
+
+
+# Correlación intraclásica
+
+
+
+```{r}
+
+var_nbi <-  c("CARENCIA_CALIDADVIVIENDA", "HACINAMIENTO", "CARENCIA_ABASTECAGUA", 
+"CARENCIA_SERVSANITARIO", "CARENCIA_ENERGIA")
+
+m_icc_nbi <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,1] <- samplesize4surveys::ICC(dplyr::filter(consulta_hogar_nbi2, URBRUR == 1)[[var_nbi[i]]], 
+                                        cl = dplyr::filter(consulta_hogar_nbi2, URBRUR == 1)$ID_UPM)$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,2] <- samplesize4surveys::ICC(dplyr::filter(consulta_hogar_nbi2, URBRUR == 2)[[var_nbi[i]]], 
+                                        cl = dplyr::filter(consulta_hogar_nbi2, URBRUR == 2)$ID_UPM)$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,3] <- samplesize4surveys::ICC(consulta_hogar_nbi2[[var_nbi[i]]], 
+                                        cl = consulta_hogar_nbi2$ID_UPM)$ICC
+}
+
+colnames(m_icc_nbi) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi) <- var_nbi
+
+
+```
+
+
+
+
+```{r}
+dim(consulta_ocupac)
+consulta_ocupac2 <- consulta_ocupac %>% inner_join(personas %>% select(URBRUR_P, I_BC_VIV, ID_BC_PERS, upm) %>% collect() )
+
+var_pea <-  c("PET", 
+              "PEA", "Desocupados", "Ocupados")
+
+m_icc_pea <- matrix(,nrow = length(var_pea), ncol = 3)
+
+  m_icc_pea[1,1] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 1)[[var_pea[1]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 1 )$upm)$ICC
+  
+  m_icc_pea[2,1] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 1 & PET == 1)[[var_pea[2]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 1 & PET == 1)$upm)$ICC
+  
+  m_icc_pea[3,1] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 1 & PEA == 1)[[var_pea[3]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 1 & PEA == 1)$upm)$ICC
+  
+  m_icc_pea[4,1] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 1 & PEA == 1)[[var_pea[4]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 1 & PEA == 1)$upm)$ICC
+  
+  
+  
+  m_icc_pea[1,2] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 2)[[var_pea[1]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 2 )$upm)$ICC
+  
+  m_icc_pea[2,2] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 2 & PET == 1)[[var_pea[2]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 2 & PET == 1)$upm)$ICC
+  
+  m_icc_pea[3,2] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 2 & PEA == 1)[[var_pea[3]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 2 & PEA == 1)$upm)$ICC
+  
+  m_icc_pea[4,2] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, URBRUR_P == 2 & PEA == 1)[[var_pea[4]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, URBRUR_P == 2 & PEA == 1)$upm)$ICC
+  
+  
+  
+  m_icc_pea[1,3] <- samplesize4surveys::ICC(consulta_ocupac2[[var_pea[1]]], 
+                                            cl = consulta_ocupac2$upm)$ICC
+    
+  m_icc_pea[2,3] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, PET == 1)[[var_pea[2]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, PET == 1)$upm)$ICC
+  
+  m_icc_pea[3,3] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, PEA == 1)[[var_pea[3]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, PEA == 1)$upm)$ICC
+  
+  m_icc_pea[4,3] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac2, PEA == 1)[[var_pea[4]]], 
+                                            cl = dplyr::filter(consulta_ocupac2, PEA == 1)$upm)$ICC
+  
+  
+  
+  
+  
+colnames(m_icc_pea) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_pea) <- var_pea
+
+```
+
+
+
+```{r}
+consulta_hogar_nbi2 %>% group_by(ID_UPM) %>% summarise(temp = n()) 
+```
+
+

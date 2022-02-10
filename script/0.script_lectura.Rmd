@@ -1,0 +1,54 @@
+---
+title: "Lectura"
+author: "José Fernando Zea"
+date: "23/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r, warning = FALSE, message = FALSE}
+library(haven)
+library(data.table)
+```
+
+```{r}
+setwd("../datos/base_31Enero2022")
+personas <- read_spss( "personas CNPV12.sav")
+personas_diccionario <- head(personas, 6)
+personas$I_BC_VIV <- paste0("X", personas$I_BC_VIV)
+
+```
+
+```{r}
+setwd("../output/csv_31enero")
+fwrite(personas, "personas.csv")
+```
+
+```{r}
+setwd("../output/etiquetas_31enero")
+saveRDS(personas_diccionario, "personas_etiquetas.rds")
+```
+
+```{r}
+setwd("../datos/base_31Enero2022")
+viviendas <- read_spss("VIVIENDAS CNPV12.sav") 
+viviendas_diccionario <- head(viviendas)
+viviendas$I_BC_VIV <- paste0("X", viviendas$I_BC_VIV)
+```
+
+```{r}
+setwd("../output/csv_31enero")
+fwrite(viviendas, "viviendas.csv")
+```
+
+```{r}
+setwd("../output/etiquetas_31enero")
+saveRDS(viviendas_diccionario, "viviendas_etiquetas.rds")
+```
+
