@@ -1,0 +1,255 @@
+---
+title: "Untitled"
+author: "José Fernando Zea"
+date: "21/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(samplesize4surveys)
+library(dplyr)
+```
+
+
+```{r}
+setwd("../output/4.UPM_Colapsadas_indicadores")
+df_nbi <- readRDS("viviendasNBI.rds")
+```
+
+Las variables a analizar son:
+  
+```{r}
+var_nbi <-  c("CARENCIA_CALIDADVIVIENDA", "HACINAMIENTO", "CARENCIA_ABASTECAGUA", 
+"CARENCIA_SERVSANITARIO", "CARENCIA_INSUMOSENERGETICOS", "CARENCIA_ASISESCOLAR", 
+"CARENCIA_SALUD", "CARENCIA_PRECARIEDADOCUPACIONAL", "NBI")
+```
+
+# Escenario original
+
+```{r}
+
+m_icc_nbi <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,1] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 1)[[var_nbi[i]]], 
+                                            cl = dplyr::filter(df_nbi, URBRUR == 1)$id_upm_inicial)$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,2] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 2)[[var_nbi[i]]], cl = dplyr::filter(df_nbi, URBRUR == 2)$id_upm_inicial)$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,3] <- samplesize4surveys::ICC(df_nbi[[var_nbi[i]]], 
+                                            cl = df_nbi$id_upm_inicial)$ICC
+}
+
+colnames(m_icc_nbi) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi) <- var_nbi
+
+
+df_deff_nbi <- 1 + (as.matrix(m_icc_nbi) * (10 - 1))
+
+```
+
+
+# Escenario con 50 viviendas
+
+
+```{r}
+m_icc_nbi50 <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi50[i,1] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 1)[[var_nbi[i]]], 
+                                               cl = dplyr::filter(df_nbi, URBRUR == 1)$id_upm50 )$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi50[i,2] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 2)[[var_nbi[i]]], cl = dplyr::filter(df_nbi, URBRUR == 2)$id_upm50 )$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi50[i,3] <- samplesize4surveys::ICC(df_nbi[[var_nbi[i]]], 
+                                               cl = df_nbi$id_upm50 )$ICC
+}
+
+colnames(m_icc_nbi50) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi50) <- var_nbi
+
+
+df_deff_nbi50 <- 1 + (as.matrix(m_icc_nbi50) * (10 - 1))
+
+```
+
+
+
+# Escenario con 100
+
+
+```{r}
+m_icc_nbi100 <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi100[i,1] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 1)[[var_nbi[i]]], 
+                                               cl = dplyr::filter(df_nbi, URBRUR == 1)$id_upm100 )$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi100[i,2] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 2)[[var_nbi[i]]], cl = dplyr::filter(df_nbi, URBRUR == 2)$id_upm100 )$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi100[i,3] <- samplesize4surveys::ICC(df_nbi[[var_nbi[i]]], 
+                                               cl = df_nbi$id_upm100 )$ICC
+}
+
+colnames(m_icc_nbi100) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi100) <- var_nbi
+
+
+df_deff_nbi100 <- 1 + (as.matrix(m_icc_nbi100) * (10 - 1))
+```
+
+
+
+```{r}
+m_icc_nbi <- round(m_icc_nbi, 2)
+m_icc_nbi50 <- round(m_icc_nbi50, 2)
+m_icc_nbi100 <- round(m_icc_nbi100, 2)
+
+```
+
+```{r}
+df_ICC <- bind_rows(as.data.frame(m_icc_nbi) %>% 
+                      tibble::rownames_to_column(), as.data.frame(m_icc_nbi50) %>% 
+                      tibble::rownames_to_column(),
+                    as.data.frame(m_icc_nbi100) %>% 
+                      tibble::rownames_to_column()
+)
+names(df_ICC)[1] <- "Carencias"
+df_ICC$Escenario <- c(rep("Originales", 9),
+                      rep("Uniones 50", 9),
+                      rep("Uniones 100", 9)
+)
+df_ICC <- arrange(df_ICC, Carencias, Escenario )
+```
+
+```{r}
+names(df_ICC)[1] <- "Carencias"
+df_ICC <- arrange(df_ICC, Carencias)
+```   
+
+
+# Tamaños
+
+```{r}
+df_tamoriginal <- df_nbi %>% group_by(id_upm_inicial) %>% summarise(num_hogares = n())
+
+df_tamano50 <- df_nbi %>% group_by(id_upm50) %>% summarise(num_hogares = n())
+
+df_tamano100 <- df_nbi %>% group_by(id_upm100) %>% summarise(num_hogares = n())
+
+summary(df_tamoriginal$num_hogares) 
+summary(df_tamano50$num_hogares)
+summary(df_tamano100$num_hogares)
+
+```
+
+
+
+# Comportamiento de los indicadores
+
+
+
+```{r}
+library(sjPlot)
+p1 <- plot_grpfrq(df_nbi$URBRUR , 
+                  df_nbi$CARENCIA_CALIDADVIVIENDA, drop.empty = FALSE, show.prc = T, show.grpcnt  = T, bar.pos = "stack")
+
+library(ggplot2)
+p1 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_CALIDADVIVIENDA)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+p2 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(HACINAMIENTO)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+
+p3 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_ABASTECAGUA)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+
+
+
+p4 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_SERVSANITARIO)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+p5 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_INSUMOSENERGETICOS)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+p6 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_ASISESCOLAR)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+p7 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_SALUD)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+p8 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(CARENCIA_PRECARIEDADOCUPACIONAL)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+
+p9 <- ggplot(df_nbi, aes(x=as.factor(URBRUR), fill=as.factor(NBI)))+
+  geom_bar(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..]), position="dodge" ) +
+  geom_text(aes( y=..count../tapply(..count.., ..x.. ,sum)[..x..], label=scales::percent(..count../tapply(..count.., ..x.. ,sum)[..x..]) ),
+            stat="count", position=position_dodge(0.9), vjust=-0.5) +
+  scale_y_continuous(labels = scales::percent)
+
+
+library(patchwork)
+grafico_carencias1 <- (p1 + p2) / (p3 + p4) 
+grafico_carencias2 <- (p5 + p6) / (p7 + p8) 
+
+```
+
+```{r}
+grafico_carencias
+```
+
+
+```
+

@@ -1,0 +1,101 @@
+---
+title: "Untitled"
+author: "José Fernando Zea"
+date: "21/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(arrow)
+```
+
+
+```{r}
+source("script_unionUPMS.r", encoding = "UTF-8")
+```
+
+
+```{r}
+setwd("../output/3.Indicadores")
+consulta_hogar_nbi <- readRDS("consulta_hogar_nbi.rds")
+```
+
+```{r}
+consulta_hogar_nbi$NBI <- rowMeans(consulta_hogar_nbi[,-1])
+```
+
+Lectura archivo de viviendas:
+```{r}
+setwd("../output/parquet_31enero")
+viviendas <- open_dataset("viviendas") %>% collect()
+```
+
+```{r}
+viviendas <- viviendas[!duplicated(viviendas$I_BC_VIV),]
+consulta_hogar_nbi <- consulta_hogar_nbi[!duplicated(consulta_hogar_nbi$I_BC_VIV),]
+
+```
+
+
+```{r}
+viviendasNBI <- inner_join(viviendas %>% select(I02_DEPTO, I03_PROV,
+                                            I04_MUN, I06_CIUCOM,  ID_UPM,URBRUR,
+                                            I_BC_VIV) , consulta_hogar_nbi, by = "I_BC_VIV")
+con <- viviendasNBI %>% group_by(I02_DEPTO, I03_PROV,
+                                            I04_MUN, I06_CIUCOM,  ID_UPM) %>%
+       count()
+con$id_upm_inicial <- 1:nrow(con)
+mean(con$n)
+```
+
+
+
+```{r}
+con$n <- NULL
+viviendasNBI <- left_join(viviendasNBI, con)
+con2 <- viviendasNBI %>% group_by(I02_DEPTO, I03_PROV,
+                                            I04_MUN, I06_CIUCOM,  id_upm_inicial) %>%
+       count()
+```
+
+
+```{r}
+algoritmo_union50 <- f_unionesUPM(df = con2, id_upm = "id_upm_inicial", n_upm = "n", umbral = 50)
+
+df_upm50 <- algoritmo_union50$df_upmUniones %>% 
+  select(id_upm_inicial, id_upm50 = union_upm) 
+df_upm50$seqUnion <- NULL
+
+
+```
+
+```{r}
+algoritmo_union100 <- f_unionesUPM(df = con2, id_upm = "id_upm_inicial", n_upm = "n", umbral = 100)
+
+df_upm100 <- algoritmo_union100$df_upmUniones %>% 
+  select(id_upm_inicial, id_upm100 = union_upm) 
+df_upm100$seqUnion <- NULL
+
+```
+
+
+```{r}
+viviendasNBI <- viviendasNBI %>% 
+  left_join(df_upm50, by = "id_upm_inicial") %>% left_join(df_upm100,
+                                                            by = "id_upm_inicial")
+```
+
+
+
+```{r}
+setwd("../output/4.UPM_Colapsadas_indicadores")
+saveRDS(viviendasNBI, "viviendasNBI.rds")
+
+saveRDS(algoritmo_union50$df_upmUniones, "DetalleUniones50.rds")
+saveRDS(algoritmo_union100$df_upmUniones, "DetalleUniones100.rds")
+```

@@ -20,9 +20,13 @@ library(data.table)
 ```{r}
 setwd("../datos/base_31Enero2022")
 personas <- read_spss( "personas CNPV12.sav")
-personas_diccionario <- head(personas, 6)
-personas$I_BC_VIV <- paste0("X", personas$I_BC_VIV)
+```
 
+
+```{r}
+personas_diccionario <- head(personas, 6)
+personas$I_BC_VIV <- paste0("X", as.character(personas$I_BC_VIV))
+personas$ID_BC_PERS <- paste0("X", as.character(personas$ID_BC_PERS))
 ```
 
 ```{r}
