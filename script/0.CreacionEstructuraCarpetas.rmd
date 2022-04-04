@@ -1,0 +1,32 @@
+---
+title: "Untitled"
+author: "José Fernando Zea"
+date: "4/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+setwd("..")
+dir.create("output")
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+setwd("../output")
+dir.create("0.etiquetas")
+dir.create("0.csv")
+dir.create("1.parquet")
+dir.create("2.IndicaroresCenso")
+dir.create("3.ConformacionUPMCenso")
+dir.create("4.CorIntralclasicaCenso")
+dir.create("5_ConsolidadoCorIntraclasicaDimensiones")
+dir.create("5C_EstadisticasDimensiones")
+dir.create("6.modelo_costos")
+dir.create("7.CorIntraclasicaPrecisionEncuestasBoliviaDiferentesTamUPMs")
+```
+

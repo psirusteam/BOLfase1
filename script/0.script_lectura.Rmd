@@ -1,0 +1,61 @@
+---
+title: "Lectura"
+author: "José Fernando Zea"
+date: "23/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Lectura de archivos 
+
+
+```{r, warning = FALSE, message = FALSE}
+library(haven)
+library(data.table)
+```
+
+```{r}
+setwd("../datos/SPSS")
+personas <- read_spss( "personas CNPV12.sav")
+```
+
+
+```{r}
+personas_diccionario <- head(personas, 6)
+personas$I_BC_VIV <- paste0("X", as.character(personas$I_BC_VIV))
+personas$ID_BC_PERS <- paste0("X", as.character(personas$ID_BC_PERS))
+```
+
+
+```{r}
+setwd("../output/0.etiquetas")
+saveRDS(personas_diccionario, "personas_etiquetas.rds")
+```
+
+```{r}
+setwd("../output/0.csv")
+fwrite(personas, "personas.csv")
+```
+
+
+
+
+```{r}
+setwd("../datos/SPSS")
+viviendas <- read_spss("VIVIENDAS CNPV12.sav") 
+viviendas_diccionario <- head(viviendas)
+viviendas$I_BC_VIV <- paste0("X", viviendas$I_BC_VIV)
+```
+
+```{r}
+setwd("../output/0.csv")
+fwrite(viviendas, "viviendas.csv")
+```
+
+```{r}
+setwd("../output/0.etiquetas")
+saveRDS(viviendas_diccionario, "viviendas_etiquetas.rds")
+```
