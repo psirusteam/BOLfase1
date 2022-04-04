@@ -30,3 +30,9 @@ dir.create("6.modelo_costos")
 dir.create("7.CorIntraclasicaPrecisionEncuestasBoliviaDiferentesTamUPMs")
 ```
 
+```{r}
+setwd("../output/1.parquet")
+dir.create("personas")
+dir.create("viviendas")
+```
+
