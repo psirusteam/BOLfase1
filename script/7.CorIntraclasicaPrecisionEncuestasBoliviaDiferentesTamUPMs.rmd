@@ -9,6 +9,11 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+```{r}
+library(samplesize4surveys)
+```
+
 # Factor correlación intraclásica censo de escenario orignal a 50 a 100 UPM's
 
 ```{r}
@@ -18,7 +23,7 @@ df_ICC_nbi <- readRDS("df_ICC.rds")
 ```
 
 
-* Modelo para preddecir la correlación intraclásica de las UPM's de 50
+* Modelo para predecir la correlación intraclásica de las UPM's de 50
 
 
 ```{r}
@@ -81,7 +86,7 @@ library(haven)
 library(labelled)
 library(srvyr)
 options(survey.adjust.domain.lonely=TRUE)
-options(survey.lonely.psu="adjust")
+options(survey.lonely.psu="adjust") # En caso de colocarse esta opción no correrá el diseño muestral
 ```
 
 
@@ -189,7 +194,9 @@ df_propDesoc <- diseno_desocupado %>%
 df_propDesoc %>% round(4) %>% `names<-`(c("Tasa de desocupación", "Error estándar", "Efecto diseño (Deff)")) %>% flextable::flextable()
 ```
 ```{r}
-nII = df_ocupacional %>% filter(Activos == 1 & area == 1) %>%  group_by(upm) %>% summarise(nII = n()) %>% pull(nII) %>% mean()  # Número promedio de personas por UPM / 3.5
+# Urbano
+nII = df_ocupacional %>% filter(Activos == 1 & area == 1) %>%  group_by(upm) %>% summarise(nII = n()) %>% pull(nII) %>% mean()  
+# Número promedio de personas por UPM / 3.5 # tomado del censo aprox. (pero es desconocido)
 rho_Pdesoc <- (df_propDesoc$P_deff-1) / (nII - 1)
 rho_Pdesoc
 ```
@@ -215,7 +222,7 @@ N_encOcup <- df_ocupacional$factor.mes[df_ocupacional$area == 1] %>% sum()
 
 # df_ocupacional$factor.mes[df_ocupacional$area == 1] %>% sum() / df_ocupacional$factor.mes %>% sum()
 
-M_encOcup <- 100000 * 0.7
+M_encOcup <- 100000 * 0.7 # CENSO (70%)
 r_encOcup <-  sum(df_ocupacional$Activos[df_ocupacional$area == 1] * df_ocupacional$factor.mes[df_ocupacional$area == 1]) / N_encOcup
 b_encOcup <- 3.5 # Personas por hogar
 rho_encOcup = rho_Pdesoc
@@ -230,7 +237,7 @@ P = P_encOcup, delta = rme_encOcup , conf = conf_encOcup, m = m_encOcup)
 
 ```{r}
 M_encOcup_50upms <- 50000 * 0.7
-rho_encOcup_50upms = rho_Pdesoc * 0.923684
+rho_encOcup_50upms = rho_Pdesoc * modelo_ICC_50UPMs$coefficients[2]
 m_encOcup = 5:15
 
 tablaMuestreo_tasaOcupac_50upms <- ss4HHSp(N = N_encOcup,
@@ -241,7 +248,7 @@ P = P_encOcup, delta = rme_encOcup , conf = conf_encOcup, m = m_encOcup)
 
 ```{r}
 M_encOcup_100upms <- 25000 * 0.7
-rho_encOcup_100upms = rho_Pdesoc * 0.82529 
+rho_encOcup_100upms = rho_Pdesoc *  modelo_ICC_100UPMs$coefficients[2] 
 m_encOcup = 5:15
 
 tablaMuestreo_tasaOcupac_100upms <- ss4HHSp(N = N_encOcup,
@@ -274,18 +281,6 @@ cat("Número de hogares por UPM")
 # Análisis de pobreza 
 
 ```{r, warning=FALSE, message=FALSE}
-diseno_desocupado <- df_ocupacional %>% 
-  filter(CondOcup != "Población sin edad de trabajar") %>%
-  as_survey_design(ids = upm,
-strata = estrato,  
-weights = factor.mes, nest = T)
-  
-df_propDesoc <- diseno_desocupado %>% 
-  group_by(area) %>% summarize(P = survey_ratio(Desocupados, Activos, na.rm = T, vartype  = "se", deff = T)) %>% slice(1) %>% select(-area) # Urbano
-df_propDesoc %>% round(4) %>% `names<-`(c("Tasa de desocupación", "Error estándar", "Efecto diseño (Deff)")) %>% flextable::flextable()
-
-
-
 diseno_pobreza <- df_pobreza %>% as_survey_design(ids = upm,
                                         strata = estrato,  
                                         weights = factor, nest = T)
