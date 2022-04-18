@@ -1,0 +1,508 @@
+---
+title: "Untitled"
+author: "José Fernando Zea"
+date: "27/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Factor correlación intraclásica censo de escenario orignal a 50 a 100 UPM's
+
+```{r}
+setwd("../output/4.CorIntraclasicaCenso")
+df_ICC_varOcup <- readRDS("df_ICC_varOcup.rds")
+df_ICC_nbi <- readRDS("df_ICC.rds")
+```
+
+
+* Modelo para preddecir la correlación intraclásica de las UPM's de 50
+
+
+```{r}
+x <- df_ICC_nbi %>% filter(Escenario == "Originales") %>% 
+  select(Urbano, Rural, Nacional) %>% as.matrix() %>% t() %>% as.numeric()
+```
+
+```{r}
+y1 <- df_ICC_nbi %>% filter(Escenario == "Uniones 50") %>% 
+  select(Urbano, Rural, Nacional) %>% as.matrix() %>% t() %>% as.numeric()
+```
+
+```{r}
+y2 <- df_ICC_nbi %>% filter(Escenario == "Uniones 100") %>% 
+  select(Urbano, Rural, Nacional) %>% as.matrix() %>% t() %>% as.numeric()
+```
+
+
+```{r}
+modelo_ICC_50UPMs <- lm(y1 ~ x) 
+summary(modelo_ICC_50UPMs)
+```
+
+```{r}
+plot(y1 ~ x, pch = 20)
+abline(modelo_ICC_50UPMs, xlab = "ICC escenario original", ylab = "ICC (UPM tamaño 50)")
+```
+
+
+
+
+```{r}
+modelo_ICC_100UPMs <- lm(y2 ~ x) 
+summary(modelo_ICC_100UPMs)
+```
+
+
+```{r}
+plot(y2 ~ x, pch = 20)
+abline(modelo_ICC_100UPMs, xlab = "ICC escenario original", 
+       ylab = "ICC (UPM tamaño 100)")
+```
+
+
+
+* Para el escenario con máximo 50 UPM se debe multiplicar por 0.923684
+* Para el escenario con máximo 100 UPM se debe multiplicar por 0.82529    
+
+
+# Escenarios encuesta
+
+
+# Escenarios de correlación intraclásica encuesta
+
+En el presente ejercicio se abordarán los escenarios óptimos de tamaño de muestra basados en la información del coeficiente de correlación intraclásica empiricos obtenidos a partir de la tasa de desocupación, pobreza y pobreza extrema. Se hace uso de la Encuesta Continua de Empleo de Bolivia 2021 y de la Encuesta de Hogares de Bolivia 2021.
+
+
+```{r}
+library(haven)
+library(labelled)
+library(srvyr)
+options(survey.adjust.domain.lonely=TRUE)
+options(survey.lonely.psu="adjust")
+```
+
+
+# Costos
+
+
+```{r}
+setwd("../output/6.modelo_costos")
+modelo <- readRDS("modelo_costos.rds")
+```
+
+
+```{r}
+setwd("../data/EncuestasHogares")
+df_ocupacional <- read_sav("ece_t4_2021_mes.sav")
+df_pobreza  <- read_sav("1eh2021_uml.sav")
+```
+
+Verificar si la encuesta expande a Diciembre:
+
+```{r}
+df_ocupacional$factor.mes %>% sum()
+```
+
+```{r}
+table(df_ocupacional$meses)
+```
+
+
+```{r}
+df_ocupacional <- df_ocupacional %>% filter(meses == 75)
+```
+
+
+```{r}
+sum(df_ocupacional$factor.mes)
+```
+
+
+En este ejercicio se revisa la correlación intraclásica empírica, La correlación intraclásifca se puede obtener a partir de los datos de la encuesta utilizando la siguiente relación:
+
+$$
+DEFF = 1 + (n_{II}-1)\rho_y
+$$
+
+Despejando el coeficiente de correlación intraclásica $\rho$:
+
+$$
+\rho_y = \frac{DEFF-1}{n_{II}-1}
+$$
+
+Con $n_{II}$  el número promedio de hogares en la UPM. 
+
+
+
+# Condición ocupacional 
+
+
+```{r, echo = FALSE, eval=FALSE}
+table(df_ocupacional$condact, useNA = "always") 
+```
+Los descoupados cesantes y aspirantes se recodifican a desocupadas, por otro lado inactivos temporal o inactivo permanente se recodifica a inactivo:
+
+```{r}
+val_labels(df_ocupacional$condact) %>% as.data.frame() %>% tibble::rownames_to_column() %>% 
+  `names<-`(c("Condición ocupacional", "Etiquetas")) %>% flextable::flextable()
+```
+
+```{r, echo=FALSE}
+df_ocupacional$CondOcup <- ifelse(df_ocupacional$condact == 1,
+                                  "Población sin edad de trabajar",
+                                   ifelse(df_ocupacional$condact %in% 
+                                          3:4, "Desocupados", 
+                                   ifelse(df_ocupacional$condact %in% 
+                          5:6, "Inactivo", "Ocupado")))
+```
+
+
+```{r}
+table(df_ocupacional$CondOcup, useNA = "always") %>% as.data.frame() %>% tibble::rownames_to_column() %>% select(-1) %>%
+  `names<-`(c("Condición ocupacional", "Frecuencia")) %>% flextable::flextable()
+```
+
+```{r, echo=FALSE}
+# Creación de variables dummies
+df_ocupacional$Activos <- ifelse(df_ocupacional$CondOcup %in% 
+                                   c("Desocupados", "Ocupado"), 1, 0)
+df_ocupacional$Ocupados <- ifelse(df_ocupacional$CondOcup == "Ocupado", 1, 0)
+df_ocupacional$Desocupados <- ifelse(df_ocupacional$CondOcup == "Desocupados", 1, 0)
+
+```
+
+Con la técnica del último conglomerado se llevan a cabo las estimaciones de la tasa de desocupación su error estándar y efecto diseño:
+
+```{r, echo=FALSE}
+ # Ultimo conglomerado solo Sector no poner segmento
+diseno_desocupado <- df_ocupacional %>% 
+  filter(CondOcup != "Población sin edad de trabajar") %>%
+  as_survey_design(ids = upm,
+strata = estrato,  
+weights = factor.mes, nest = T)
+  
+df_propDesoc <- diseno_desocupado %>% 
+  group_by(area) %>% summarize(P = survey_ratio(Desocupados, Activos, na.rm = T, vartype  = "se", deff = T)) %>% slice(1) %>% select(-area) # Urbano
+df_propDesoc %>% round(4) %>% `names<-`(c("Tasa de desocupación", "Error estándar", "Efecto diseño (Deff)")) %>% flextable::flextable()
+```
+```{r}
+nII = df_ocupacional %>% filter(Activos == 1 & area == 1) %>%  group_by(upm) %>% summarise(nII = n()) %>% pull(nII) %>% mean()  # Número promedio de personas por UPM / 3.5
+rho_Pdesoc <- (df_propDesoc$P_deff-1) / (nII - 1)
+rho_Pdesoc
+```
+
+Para calcular el rho utilizamos el número promedio de personas  en condición ocupacional activa seleccionadas en cada UPM en la encuesta (`r round(nII,1)`) y el coeficiente de correlación intraclásica obtenido (`r round(df_propDesoc$P_deff,1)`). El coeficiente de correlación intraclásica obtenido es:
+
+```{r}
+cat("El coeficiente de correlación intraclásica de la proporción de desocupados: \n")
+rho_Pdesoc %>% round(3)
+```
+
+Con el coeficiente de correlación intraclásica pueden obtenerse las tablas de muestreo para las cerca de 100 mil UPM's construidas, para construir la tabla de muestreo se requiere disponer del margen de error de la encuesta, del número de UPM's en el universo.
+
+```{r}
+conf_encOcup <- 0.95
+me_encOcup <- qnorm(1-(1-conf_encOcup)/2) * df_propDesoc$P_se
+
+# P_encOcup <- sum(df_ocupacional$Desocupados[df_ocupacional$area == 1] * df_ocupacional$factor.mes[df_ocupacional$area == 1]) / sum(df_ocupacional$Activos[df_ocupacional$area == 1] * df_ocupacional$factor.mes[df_ocupacional$area == 1]) # df_propDesoc$P
+
+P_encOcup <- df_propDesoc$P
+rme_encOcup <- me_encOcup / P_encOcup
+N_encOcup <- df_ocupacional$factor.mes[df_ocupacional$area == 1] %>% sum()
+
+# df_ocupacional$factor.mes[df_ocupacional$area == 1] %>% sum() / df_ocupacional$factor.mes %>% sum()
+
+M_encOcup <- 100000 * 0.7
+r_encOcup <-  sum(df_ocupacional$Activos[df_ocupacional$area == 1] * df_ocupacional$factor.mes[df_ocupacional$area == 1]) / N_encOcup
+b_encOcup <- 3.5 # Personas por hogar
+rho_encOcup = rho_Pdesoc
+m_encOcup = 5:15
+
+tablaMuestreo_tasaOcupac <- ss4HHSp(N = N_encOcup,
+M = M_encOcup, r = r_encOcup, b = b_encOcup, rho = rho_Pdesoc,
+P = P_encOcup, delta = rme_encOcup , conf = conf_encOcup, m = m_encOcup)
+```
+
+
+
+```{r}
+M_encOcup_50upms <- 50000 * 0.7
+rho_encOcup_50upms = rho_Pdesoc * 0.923684
+m_encOcup = 5:15
+
+tablaMuestreo_tasaOcupac_50upms <- ss4HHSp(N = N_encOcup,
+M = M_encOcup_50upms, r = r_encOcup, b = b_encOcup, rho = rho_encOcup_50upms,
+P = P_encOcup, delta = rme_encOcup , conf = conf_encOcup, m = m_encOcup)
+```
+
+
+```{r}
+M_encOcup_100upms <- 25000 * 0.7
+rho_encOcup_100upms = rho_Pdesoc * 0.82529 
+m_encOcup = 5:15
+
+tablaMuestreo_tasaOcupac_100upms <- ss4HHSp(N = N_encOcup,
+M = M_encOcup_100upms, r = r_encOcup, b = b_encOcup, rho = rho_encOcup_100upms,
+P = P_encOcup, delta = rme_encOcup , conf = conf_encOcup, m = m_encOcup)
+```
+
+
+```{r}
+cat("El número de activos")
+df_ocupacional$Activos[df_ocupacional$area == 1] %>% sum()
+cat("UPMs en la encuesta activos:")
+df_ocupacional$upm[df_ocupacional$Activos == 1 & df_ocupacional$area == 1] %>% unique() %>% length()
+cat("Número de hogares por UPM")
+(df_ocupacional %>% group_by(upm) %>% summarise(cuenta = n()) %>% pull(cuenta) %>% mean()) / 3.5
+```
+
+```{r}
+cat("Número de hogares")
+nrow(df_ocupacional)
+cat("Número de UPMs")
+df_ocupacional$upm %>% unique() %>% length()
+cat("Número de hogares por UPM")
+(df_ocupacional %>% group_by(upm) %>% summarise(cuenta = n()) %>% pull(cuenta) %>% mean()) / 3.5
+```
+
+
+
+
+# Análisis de pobreza 
+
+```{r, warning=FALSE, message=FALSE}
+diseno_desocupado <- df_ocupacional %>% 
+  filter(CondOcup != "Población sin edad de trabajar") %>%
+  as_survey_design(ids = upm,
+strata = estrato,  
+weights = factor.mes, nest = T)
+  
+df_propDesoc <- diseno_desocupado %>% 
+  group_by(area) %>% summarize(P = survey_ratio(Desocupados, Activos, na.rm = T, vartype  = "se", deff = T)) %>% slice(1) %>% select(-area) # Urbano
+df_propDesoc %>% round(4) %>% `names<-`(c("Tasa de desocupación", "Error estándar", "Efecto diseño (Deff)")) %>% flextable::flextable()
+
+
+
+diseno_pobreza <- df_pobreza %>% as_survey_design(ids = upm,
+                                        strata = estrato,  
+                                        weights = factor, nest = T)
+   
+df_Estimapobreza <- diseno_pobreza %>% group_by(area) %>%
+  summarize(prop_pobreza = survey_mean(p0, na.rm = T, deff = T), prop_pobreza_extrema = survey_mean(pext0, na.rm = T, deff = T)) %>%
+  mutate(prop_pobreza = round(prop_pobreza, 2), 
+          prop_pobreza_se = round(prop_pobreza_se, 4),
+          prop_pobreza_deff = round(prop_pobreza_deff, 1),
+          prop_pobreza_extrema = round(prop_pobreza_extrema, 2),
+          prop_pobreza_extrema_se = round(prop_pobreza_extrema_se, 4),
+          prop_pobreza_extrema_deff = round(prop_pobreza_extrema_deff, 1)
+         )
+df_Estimapobreza %>% slice(1) %>% select(-area) %>%
+ round(4) %>% `names<-`(c("Proporción pobreza", "Error estándar pobreza", "Efecto diseño pobreza", "Proporción pobreza extrema", "Error estándar pobreza extrema", "Efecto diseño pobreza extremo")) %>% flextable::flextable()
+
+```
+
+
+
+El coeficiente de correlación intraclásica de la pobreza es:
+
+```{r}
+nII_pobreza = df_pobreza %>% filter(area == 1) %>% group_by(upm) %>% summarise(nII = n()) %>% pull(nII) %>% mean() 
+rho_Pobreza <- (df_Estimapobreza$prop_pobreza_deff[df_Estimapobreza$area == 1] - 1) / (nII_pobreza - 1)
+cat("El coeficiente de correlación intraclásica de la pobreza: \n")
+rho_Pobreza
+```
+
+Las tablas de muestreo para la pobreza son:
+
+```{r}
+#df_pobreza$factor[df_pobreza$area == 1] %>% sum() / df_pobreza$factor %>% sum()
+confiabilidad <- 0.95
+error <- 1- confiabilidad
+rme_pobreza <- df_Estimapobreza$prop_pobreza_se[df_Estimapobreza$area == 1] * qnorm(1-error/2)
+tablaMuestreo_pobreza <- ss4HHSp(N = df_pobreza$factor[df_Estimapobreza$area == 1] %>% sum(),
+M = 100000 * 0.7, r = 1, b = 3.5, 
+rho = rho_Pobreza, P = df_Estimapobreza$prop_pobreza[1],
+delta = rme_pobreza / df_Estimapobreza$prop_pobreza[1],
+conf = 0.95, m = 5:15)
+```
+
+
+
+
+```{r}
+rho_Pobreza_50upms = rho_Pobreza * 0.923684
+
+tablaMuestreo_pobreza_50upms <- ss4HHSp(N = df_pobreza$factor[df_Estimapobreza$area == 1] %>% sum(),
+M = 50000 * 0.7, r = 1, b = 3.5, rho = rho_Pobreza_50upms,
+P = df_Estimapobreza$prop_pobreza[1], delta = rme_pobreza / df_Estimapobreza$prop_pobreza[1] , conf = 0.95, m = 5:15)
+```
+
+
+```{r}
+rho_Pobreza_100upms = rho_Pobreza * 0.82529    
+
+tablaMuestreo_pobreza_100upms <- ss4HHSp(N = df_pobreza$factor[df_Estimapobreza$area == 1] %>% sum(),
+M = 25000 * 0.7, r = 1, b = 3.5, rho = rho_Pobreza_100upms,
+P = df_Estimapobreza$prop_pobreza[1], delta = rme_pobreza / df_Estimapobreza$prop_pobreza[1] , conf = 0.95, m = 5:15)
+```
+
+
+
+Verificaciones:
+
+```{r}
+cat("Número de encuestas")
+dim(df_pobreza)[1] 
+cat("Número de UPMs")
+df_pobreza$upm %>% unique() %>% length() 
+cat("Número de hogares por UPM")
+(df_pobreza %>% group_by(upm) %>% summarise(cuenta = n()) %>% pull(cuenta)) %>% mean() / 3.5 
+```
+
+
+# Pobreza extrema
+
+El coeficiente de correlación intraclásica de la pobreza extrema es:
+
+```{r}
+rho_PobrezaExtrema <- (df_Estimapobreza$prop_pobreza_extrema_deff[1] - 1) / (nII_pobreza - 1)
+cat("El coeficiente de correlación intraclásica de la pobreza: \n")
+rho_PobrezaExtrema
+```
+
+Las tablas de muestreo para la pobreza extrema son:
+
+```{r}
+confiabilidad <- 0.95
+error <- 1- confiabilidad
+rme_pobreza_extrema <- df_Estimapobreza$prop_pobreza_extrema_se[1] * qnorm(1-error/2)
+tablaMuestreo_pobreza_extrema <- ss4HHSp(N = df_pobreza$factor[df_Estimapobreza$area == 1] %>% sum(),
+M = 100000 * 0.7, r = 1, b = 3.5, 
+rho = rho_PobrezaExtrema, P = df_Estimapobreza$prop_pobreza_extrema[1],
+delta = rme_pobreza_extrema / df_Estimapobreza$prop_pobreza_extrema[1] , 
+conf = 0.95, m = 5:15)
+```
+
+
+```{r}
+rho_PobrezaExtrema_50upms = rho_PobrezaExtrema * 0.923684
+
+tablaMuestreo_pobrezaExtrema_50upms <- ss4HHSp(N = df_pobreza$factor[df_Estimapobreza$area == 1] %>% sum(),
+M = 50000 * 0.7, r = 1, b = 3.5, rho = rho_PobrezaExtrema_50upms,
+P = df_Estimapobreza$prop_pobreza_extrema[1], delta = rme_pobreza_extrema / df_Estimapobreza$prop_pobreza_extrema[1] , conf = 0.95, m = 5:15)
+```
+
+
+```{r}
+rho_PobrezaExtrema_100upms = rho_Pobreza * 0.82529    
+
+tablaMuestreo_pobrezaExtrema_100upms <- ss4HHSp(N = df_pobreza$factor[df_Estimapobreza$area == 1] %>% sum(),
+M = 25000 * 0.7, r = 1, b = 3.5, rho = rho_PobrezaExtrema_100upms,
+P = df_Estimapobreza$prop_pobreza_extrema[1], delta = rme_pobreza_extrema / df_Estimapobreza$prop_pobreza_extrema[1] , conf = 0.95, m = 5:15)
+```
+
+
+```{r}
+nrow(df_pobreza[df_pobreza$area == 1,])
+df_pobreza$upm[df_pobreza$area == 1] %>% unique() %>% length()
+(df_pobreza %>% filter(area == 1) %>% group_by(upm) %>% summarise(cuenta = n()) %>% pull(cuenta)) %>% mean() / 3.5
+```
+
+
+
+
+
+
+```{r}
+tablacostos_tasasOcup <- tablaMuestreo_tasaOcupac %>% mutate(TamUPM   = 25) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_tasaOcupac$CostosAprox <- predict(modelo, tablacostos_tasasOcup)
+```
+
+
+
+```{r}
+tablacostos_tasasOcup50 <- tablaMuestreo_tasaOcupac_50upms %>% mutate(TamUPM  = 50) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF, TamUPM)
+tablaMuestreo_tasaOcupac_50upms$CostosAprox <- predict(modelo, tablacostos_tasasOcup50)
+```
+
+
+```{r}
+tablacostos_tasasOcup100 <- tablaMuestreo_tasaOcupac_100upms %>% mutate(TamUPM  = 100) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF, TamUPM)
+tablaMuestreo_tasaOcupac_100upms$CostosAprox <- predict(modelo, tablacostos_tasasOcup100)
+```
+
+
+
+
+
+```{r}
+tablacostos_pobreza <- tablaMuestreo_pobreza %>% mutate(TamUPM = 25) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_pobreza$CostosAprox <- predict(modelo, tablacostos_pobreza)
+```
+
+
+
+```{r}
+tablacostos_pobreza50 <- tablaMuestreo_pobreza_50upms %>% mutate(TamUPM = 50) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_pobreza_50upms$CostosAprox <- predict(modelo, tablacostos_pobreza50)
+```
+
+
+
+```{r}
+tablacostos_pobreza100 <- tablaMuestreo_pobreza_100upms %>% mutate(TamUPM = 100) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_pobreza_100upms$CostosAprox <- predict(modelo, tablacostos_pobreza100)
+```
+
+
+
+```{r}
+tablacostos_pobreza_extrema <- tablaMuestreo_pobreza_extrema %>% mutate(TamUPM   = 25) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_pobreza_extrema$CostosAprox <- predict(modelo, tablacostos_pobreza_extrema)
+```
+
+
+
+```{r}
+tablacostos_pobreza_extrema50 <- tablaMuestreo_pobrezaExtrema_50upms %>% mutate(TamUPM  = 50) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_pobrezaExtrema_50upms$CostosAprox <- predict(modelo, tablacostos_pobreza_extrema50)
+```
+
+
+
+```{r}
+tablacostos_pobreza_extrema100 <- tablaMuestreo_pobrezaExtrema_100upms %>% mutate(TamUPM  = 100) %>%
+  select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
+tablaMuestreo_pobrezaExtrema_100upms$CostosAprox <- predict(modelo, tablacostos_pobreza_extrema100)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
