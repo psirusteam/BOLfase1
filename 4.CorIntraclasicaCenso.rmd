@@ -1,0 +1,348 @@
+---
+title: "Calculos correlación intraclásica censo"
+author: "José Fernando Zea"
+date: "21/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Se cargan los paquetes necesarios:
+
+```{r, warning=FALSE, message=FALSE}
+library(samplesize4surveys)
+library(dplyr)
+```
+
+
+# Ocupados
+
+```{r, warning=FALSE, message=FALSE}
+setwd("../output/3.ConformacionUPMCenso")
+consulta_ocupac <- readRDS("consulta_ocupac.rds")
+```
+El número de filas y de columnas disponible inicialmente:
+
+```{r}
+dim(consulta_ocupac)
+```
+
+
+```{r}
+consulta_ocupac <- consulta_ocupac %>% filter(PEA == 1 & !is.na(PEA))
+nrow(consulta_ocupac)
+```
+
+
+Se analiza la variable indicadora de desocupación:
+
+
+```{r}
+var_desmpleo <-  c("Desocupados")
+```
+
+
+# Escenario original
+
+Se calcula los escenarios de correlación intraclásica para las UPM originales:
+
+```{r}
+m_icc_varOcup <- matrix(,nrow = length(var_desmpleo), ncol = 3)
+# Urbano
+for(i in 1:length(var_desmpleo)){
+  m_icc_varOcup[i,1] <- ICC(dplyr::filter(consulta_ocupac, 
+                        URBRUR == 1)[[var_desmpleo[i]]], 
+                        cl = filter(consulta_ocupac, URBRUR == 1)$id_upm_inicial)$ICC
+}
+# Rural
+for(i in 1:length(var_desmpleo)){
+  m_icc_varOcup[i,2] <- samplesize4surveys::ICC(dplyr::filter(consulta_ocupac, URBRUR == 2)[[var_desmpleo[i]]], cl = dplyr::filter(consulta_ocupac, URBRUR == 2)$id_upm_inicial)$ICC
+}
+
+# General
+for(i in 1:length(var_desmpleo)){
+  m_icc_varOcup[i,3] <- samplesize4surveys::ICC(consulta_ocupac[[var_desmpleo[i]]], 
+                                        cl = consulta_ocupac$id_upm_inicial)$ICC
+}
+
+colnames(m_icc_varOcup) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_varOcup) <- var_desmpleo
+```
+
+
+
+# Escenario con 50 viviendas
+
+Se calcula los escenarios de correlación intraclásica para las UPM colapsadas con un umbral de 50 viviendas:
+
+```{r}
+m_icc50_varOcup <- matrix(,nrow = length(var_desmpleo), ncol = 3)
+for(i in 1:length(var_desmpleo)){
+  m_icc50_varOcup[i,1] <- ICC(dplyr::filter(consulta_ocupac, 
+                          URBRUR == 1)[[var_desmpleo[i]]], 
+                          cl = filter(consulta_ocupac, URBRUR == 1)$id_upm50)$ICC
+}
+
+for(i in 1:length(var_desmpleo)){
+  m_icc50_varOcup[i,2] <- ICC(dplyr::filter(consulta_ocupac, 
+                          URBRUR == 2)[[var_desmpleo[i]]], cl = filter(consulta_ocupac, 
+                          URBRUR == 2)$id_upm50)$ICC
+}
+
+
+for(i in 1:length(var_desmpleo)){
+  m_icc50_varOcup[i,3] <- ICC(consulta_ocupac[[var_desmpleo[i]]], 
+                                        cl = consulta_ocupac$id_upm50)$ICC
+}
+
+colnames(m_icc50_varOcup) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc50_varOcup) <- var_desmpleo
+```
+
+
+
+# Escenario con 100 viviendas
+
+Se calcula los escenarios de correlación intraclásica para las UPM colapsadas con un umbral de 100 viviendas:
+
+```{r}
+m_icc100_varOcup <- matrix(,nrow = length(var_desmpleo), ncol = 3)
+for(i in 1:length(var_desmpleo)){
+  m_icc100_varOcup[i,1] <- ICC(filter(consulta_ocupac, URBRUR == 1)[[var_desmpleo[i]]], 
+                                        cl = dplyr::filter(consulta_ocupac, URBRUR == 1)$id_upm100)$ICC
+}
+
+for(i in 1:length(var_desmpleo)){
+  m_icc100_varOcup[i,2] <- ICC(dplyr::filter(consulta_ocupac, URBRUR == 2)[[var_desmpleo[i]]], cl = filter(consulta_ocupac, URBRUR == 2)$id_upm100)$ICC
+}
+
+
+for(i in 1:length(var_desmpleo)){
+  m_icc100_varOcup[i,3] <- ICC(consulta_ocupac[[var_desmpleo[i]]], 
+                                        cl = consulta_ocupac$id_upm100)$ICC
+}
+
+colnames(m_icc100_varOcup) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc100_varOcup) <- var_desmpleo
+```
+
+
+Las matrices de correlación intraclásica para las variables de desocupación son:
+
+```{r}
+m_icc_varOcup <- round(m_icc_varOcup, 3)
+m_icc50_varOcup <- round(m_icc50_varOcup, 3)
+m_icc100_varOcup <- round(m_icc100_varOcup, 3)
+```
+
+Estas matrices se ensamblan en un único dataframe:
+
+```{r}
+df_ICC_varOcup <- bind_rows(as.data.frame(m_icc_varOcup) %>% 
+                      tibble::rownames_to_column(), as.data.frame(m_icc50_varOcup) %>% 
+tibble::rownames_to_column(),
+as.data.frame(m_icc100_varOcup) %>% 
+tibble::rownames_to_column()
+                    )
+names(df_ICC_varOcup)[1] <- "VariablesOcupacioneles"
+df_ICC_varOcup$Escenario <- c(rep("Originales", 1),
+                      rep("Uniones 50", 1),
+                      rep("Uniones 100", 1)
+                      )
+df_ICC_varOcup <- arrange(df_ICC_varOcup, VariablesOcupacioneles)
+```
+
+
+# Tamaños
+
+Revisamos los tamaños de las UPMs:
+```{r}
+df_tamoriginal_varOcup <- consulta_ocupac %>% group_by(id_upm_inicial) %>% summarise(num_hogares = n())
+
+df_tamano50_varOcup <- consulta_ocupac %>% group_by(id_upm50) %>% summarise(num_hogares = n())
+
+df_tamano100_varOcup <- consulta_ocupac %>% group_by(id_upm100) %>% summarise(num_hogares = n())
+
+summary(df_tamoriginal_varOcup$num_hogares)
+summary(df_tamano50_varOcup$num_hogares)
+summary(df_tamano100_varOcup$num_hogares)
+```
+
+```{r}
+gc(reset = T)
+```
+
+Se guardar las correlaciones intraclásicas de las variables de ocupación
+
+```{r}
+setwd("../output/4.CorIntraclasicaCenso")
+saveRDS(consulta_ocupac, "consulta_ocupac.rds")
+saveRDS(df_ICC_varOcup, "df_ICC_varOcup.rds")
+```
+
+
+# Cálculo de corerelación intraclásica para el NBI
+
+Calculamos la correlación intraclasíca para las variables del NBI:
+
+```{r}
+setwd("../output/3.ConformacionUPMCenso")
+df_nbi <- readRDS("viviendasNBI.rds")
+```
+
+Las dimensiones del NBI a analizar son:
+  
+```{r}
+var_nbi <-  c("CARENCIA_CALIDADVIVIENDA", "HACINAMIENTO", "CARENCIA_ABASTECAGUA", 
+"CARENCIA_SERVSANITARIO", "CARENCIA_INSUMOSENERGETICOS", "CARENCIA_ASISESCOLAR", 
+"CARENCIA_SALUD", "CARENCIA_PRECARIEDADOCUPACIONAL", "NBI")
+```
+
+# Escenario original
+
+Calculamos las correlaciones intraclásicas de las dimensiones del NBI con las UPMs originales:
+```{r}
+gc(reset = T)
+m_icc_nbi <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,1] <- ICC(filter(df_nbi, URBRUR == 1)[[var_nbi[i]]], 
+                                            cl = filter(df_nbi, URBRUR == 1)$id_upm_inicial)$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,2] <- ICC(filter(df_nbi, URBRUR == 2)[[var_nbi[i]]],
+                     cl = filter(df_nbi, URBRUR == 2)$id_upm_inicial)$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi[i,3] <- ICC(df_nbi[[var_nbi[i]]], 
+                    cl = df_nbi$id_upm_inicial)$ICC
+}
+
+colnames(m_icc_nbi) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi) <- var_nbi
+gc(reset = T)
+```
+
+
+# Escenario con 50 viviendas
+
+Calculamos las correlaciones intraclásicas de las dimensiones del NBI con 50 viviendas:
+
+```{r}
+m_icc_nbi50 <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi50[i,1] <- ICC(filter(df_nbi, URBRUR == 1)[[var_nbi[i]]], 
+                          cl = filter(df_nbi, URBRUR == 1)$id_upm50 )$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi50[i,2] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 2)[[var_nbi[i]]], 
+                                              cl = dplyr::filter(df_nbi, URBRUR == 2)$id_upm50 )$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi50[i,3] <- samplesize4surveys::ICC(df_nbi[[var_nbi[i]]], 
+                                               cl = df_nbi$id_upm50 )$ICC
+}
+
+colnames(m_icc_nbi50) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi50) <- var_nbi
+```
+
+
+
+# Escenario con 100
+
+Calculamos las correlaciones intraclásicas de las dimensiones del NBI con 100 viviendas:
+
+
+```{r}
+m_icc_nbi100 <- matrix(,nrow = length(var_nbi), ncol = 3)
+for(i in 1:length(var_nbi)){
+  m_icc_nbi100[i,1] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 1)[[var_nbi[i]]], 
+                                               cl = dplyr::filter(df_nbi, URBRUR == 1)$id_upm100 )$ICC
+}
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi100[i,2] <- samplesize4surveys::ICC(dplyr::filter(df_nbi, URBRUR == 2)[[var_nbi[i]]], cl = dplyr::filter(df_nbi, URBRUR == 2)$id_upm100 )$ICC
+}
+
+
+for(i in 1:length(var_nbi)){
+  m_icc_nbi100[i,3] <- samplesize4surveys::ICC(df_nbi[[var_nbi[i]]], 
+                                               cl = df_nbi$id_upm100 )$ICC
+}
+
+colnames(m_icc_nbi100) <- c("Urbano", "Rural", "Nacional")
+row.names(m_icc_nbi100) <- var_nbi
+gc()
+#df_deff_nbi100 <- 1 + (as.matrix(m_icc_nbi100) * (10 - 1))
+```
+
+Se unifican las correlaciones intraclásicas:
+
+```{r}
+m_icc_nbi <- round(m_icc_nbi, 3)
+m_icc_nbi50 <- round(m_icc_nbi50, 3)
+m_icc_nbi100 <- round(m_icc_nbi100, 3)
+```
+
+```{r}
+df_ICC <- bind_rows(as.data.frame(m_icc_nbi) %>% 
+                      tibble::rownames_to_column(), as.data.frame(m_icc_nbi50) %>% 
+                      tibble::rownames_to_column(),
+                    as.data.frame(m_icc_nbi100) %>% 
+                      tibble::rownames_to_column()
+)
+names(df_ICC)[1] <- "Carencias"
+df_ICC$Escenario <- c(rep("Originales", 9),
+                      rep("Uniones 50", 9),
+                      rep("Uniones 100", 9)
+)
+df_ICC <- arrange(df_ICC, Carencias, Escenario )
+```
+
+Se organizan con respecto a las variables, las UPM's originales, de tamaño 50 y tamaño 100.
+
+```{r}
+names(df_ICC)[1] <- "Carencias"
+
+df_ICC <- df_ICC[c(1,3,2,4,6,5,  7, 9, 8,  10, 12, 11,  
+                   13, 15, 14,  16, 18, 17, 
+                   19, 21, 20,   22, 24, 23,  25, 27, 26),]
+```
+
+# Tamaños
+Los tamaños de las UPMs resultantes son:
+
+```{r}
+df_tamoriginal <- df_nbi %>% group_by(id_upm_inicial) %>% summarise(num_hogares = n())
+
+df_tamano50 <- df_nbi %>% group_by(id_upm50) %>% summarise(num_hogares = n())
+
+df_tamano100 <- df_nbi %>% group_by(id_upm100) %>% summarise(num_hogares = n())
+
+summary(df_tamoriginal$num_hogares) 
+summary(df_tamano50$num_hogares)
+summary(df_tamano100$num_hogares)
+```
+
+Se guardan los indicadores: 
+
+```{r}
+setwd("../output/4.CorIntraclasicaCenso")
+saveRDS(df_ICC, "df_ICC.rds")
+saveRDS(df_nbi, "df_nbi.rds")
+```
+
+
+
+
+
+
+

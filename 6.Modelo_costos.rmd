@@ -1,0 +1,33 @@
+---
+title: "Untitled"
+author: "José Fernando Zea"
+date: "18/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(readxl)
+```
+
+```{r}
+setwd("../data/Datos_Modelo")
+datos <- read_excel("ValoresCostos.xlsx" )
+```
+
+
+```{r}
+modelo_costos <- lm(formula = CostoUPM ~ PSUinSample + HouseholdsPerPSU + deff + 
+    TamUPM + HouseholdsPerPSU * PSUinSample, data = datos)
+```
+
+
+```{r}
+setwd("../output/6.modelo_costos")
+saveRDS(modelo_costos, "modelo_costos.rds")
+```
+

@@ -1,0 +1,611 @@
+---
+title: "Indicadores y consolidación tablas"
+author: "José Fernando Zea"
+date: "6/2/2022"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Los cálculos de los indicadores del NBI se basan en el siguiente documento: 
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+library(arrow)
+library(dplyr)
+library(labelled)
+library(flextable)
+```
+
+
+# Creación de NBI
+
+Leemos el archivo de etiquetas de SPSS del archivo de viviendas y personas:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+setwd("../output/0.etiquetas")
+viviendas_etiquetas <- readRDS("viviendas_etiquetas.rds")
+personas_etiquetas <- readRDS("personas_etiquetas.rds")
+```
+
+
+Leemos los archivos particionados en formato parquet para acelerar el procesamiento:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+setwd("../output/1.parquet")
+personas <- open_dataset("personas")
+viviendas <- open_dataset("viviendas")
+```
+
+
+
+Filtramos con las viviendas ocupadas con personas presentes
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas <- viviendas %>% filter(P02_CONDOCUPA == 1) 
+```
+
+
+En la tabla de personas se conservan los registros con viviendas ocupadas:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+cod_viviendas <- viviendas %>%  collect() %>% pull(I_BC_VIV)
+personas <- personas %>% filter(I_BC_VIV %in% cod_viviendas)
+```
+
+De manera similar, en la tabla de viviendas se conservan las viviendas que aparecen en la tabla de personas.
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+cod_viviendas_tabla_personas <- viviendas %>%  collect() %>% pull(I_BC_VIV) %>% unique()
+viviendas <- viviendas %>% 
+             filter(I_BC_VIV %in% cod_viviendas_tabla_personas)
+
+```
+
+
+* El número de total de viviendas es de `r `format(nrow(viviendas), big.mark = ",")`.
+* El número de total de personas es de `r `format(nrow(personas), big.mark = ",")`.
+
+
+
+# Materiales de la vivienda
+
+Según el INE (2017) la categoría de material de la vivienda se calcula en pisos con menores calidades de cemento y madera o muros de menor calidad inferior al adobe revocado o techos de menor calidad a la calamina. 
+Se considerará que el hogar presenta carencia en pisos los hogares que tengan pisos de tierra y otros materiales.
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P06_PISOS %>% val_labels()
+```
+
+Se considera que el hogar tiene carencia en paredes a los hogares que tengan como material piedra, madera, Caña, palma, tronco y otros materiales. Fuente: CEPAL / proyecto de Cooperación CAN
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P03_PARED %>% val_labels()
+```
+
+Por otro lado, los techos que presentan carencia son los techos de paja, palma, caña, barro y otros.
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P05_TECHO %>% val_labels()
+```
+
+El hogar presenta carencia si carencia en pisos, paredes y techos:
+
+* Pisos de tierra y otros (categoría 1 y 9)
+* Paredes de piedra, madera, caña, palma, tronco, y otro (categoría 4 a 7)
+* Techos de Paja, palma, caña, barro y otros (categorías 4 y 5)
+
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_carenciaCalidadViv <- viviendas  %>% 
+  mutate(CARENCIA_CALIDADVIVIENDA = as.numeric(P06_PISOS %in% c(1, 9) |
+         P03_PARED %in% 4:7 | P05_TECHO %in% 4:5)) %>%
+  select(I_BC_VIV, CARENCIA_CALIDADVIVIENDA) %>% collect()
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_reporteCarenciaViv <- table(consulta_carenciaCalidadViv$CARENCIA_CALIDADVIVIENDA, useNA = "always") %>% as.data.frame() %>% `names<-`(c("Carencia Vivienda", "Frecuencia"))
+consulta_reporteCarenciaViv$porcentaje <- round(100 * consulta_reporteCarenciaViv$Frecuencia / sum(consulta_reporteCarenciaViv$Frecuencia), 2) 
+consulta_reporteCarenciaViv %>% flextable::flextable()
+```
+
+
+# Indicador de hacinamiento
+
+La carencia de espacio o hacinamiento se considera a partir de 2,5 personas por cuarto, se utilizan las siguientes variables:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P14_HABITAC %>% var_label()
+```
+
+También el total de personas que habita en la vivienda:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$TOT_PER_VIV %>% var_label()
+```
+
+Un número de personas de 2,5 personas por cuartos o más se considera una carencia de espacio:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_hacinamiento  <- viviendas %>% select(I_BC_VIV, P14_HABITAC, TOT_PER_VIV) %>%
+                          mutate(hacinamiento = TOT_PER_VIV / P14_HABITAC,
+                                HACINAMIENTO = as.numeric(hacinamiento > 2.5)) %>%
+                           select(I_BC_VIV, HACINAMIENTO) %>% collect()
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_reporteHacin <- table(consulta_hacinamiento$HACINAMIENTO, useNA = "always") %>% as.data.frame() %>% `names<-`(c("Hacinamiento", "Frecuencia"))
+consulta_reporteHacin$porcentaje <- round(100 * consulta_reporteHacin$Frecuencia / sum(consulta_reporteHacin$Frecuencia), 2) 
+consulta_reporteHacin %>% flextable::flextable()
+```
+
+
+# Disponibilidad de agua potable
+
+La carencia en disponibilidad de agua potable se mide con la siguiente variable:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P07_AGUAPRO %>% var_label()
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P07_AGUAPRO %>% val_labels()
+```
+
+Se considera que un hogar urbano tiene carencia de disponibilidad de agua si el hogar no recibe de cañería de red. En el caso que el hogar esté ubicada en el área rural, se considera que el hogar tiene carencia de disponibilidad de agua si se obtiene a partir de pozo o noria, de lluvia, río, vertiente, acequia, lago, laguna y curichi.
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_abastecAgua <- viviendas %>% select(I_BC_VIV, URBRUR,  P07_AGUAPRO) %>% 
+                        mutate(CARENCIA_ABASTECAGUA  = ifelse(URBRUR  == 1 &
+                               P07_AGUAPRO %in% 2:7, 1, 
+                               ifelse(URBRUR  == 2 & P07_AGUAPRO %in% 6:7, 1, 0)))  %>%
+                        select(I_BC_VIV, CARENCIA_ABASTECAGUA) %>% collect()
+```
+
+
+La carencia de disponibilidad de agua es cercana al 20%:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_reporteabastecAgua <- table(consulta_abastecAgua$CARENCIA_ABASTECAGUA, useNA = "always") %>% as.data.frame() %>% `names<-`(c("Carencia abastecimiento agua", "Frecuencia"))
+consulta_reporteabastecAgua$porcentaje <- round(100 * consulta_reporteabastecAgua$Frecuencia / sum(consulta_reporteabastecAgua$Frecuencia), 2) 
+consulta_reporteabastecAgua %>% flextable::flextable()
+```
+
+
+
+# Acceso a servicios sanitarios para el desecho de excretas
+El servicio sanitario se aborda con las siguientes variables:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P09_SERVSANIT %>% var_label()
+```
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P09_SERVSANIT %>% val_labels()
+
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P10_DESAGUE %>% var_label()
+```
+
+```{r, warning=FALSE, message=FALSE}
+viviendas_etiquetas$P10_DESAGUE %>% val_labels()
+```
+Se consideran hogares con necesidad insatisfecha en esta dimensión:
+* Área urbana: hogares sin conexión a una red de captación de desagüe y con tipo de servicio sanitario igual a excusado lavable, letrina, pozo ciego o sin servicio sanitario.
+* Área rural: hogares que no cuentan con ningún sistema de eliminación de excretas o que no disponen de servicio sanitario.
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_servSanit <- viviendas %>% collect() %>% select(I_BC_VIV,URBRUR,  P09_SERVSANIT, P10_DESAGUE) %>% 
+  mutate(CARENCIA_SERVSANITARIO  = ifelse(URBRUR == 1 & (P09_SERVSANIT == 3 | (P10_DESAGUE %in% 2:6)), 1, 
+                                        ifelse(URBRUR == 2 & (P09_SERVSANIT == 3 | P10_DESAGUE%in% 4:6), 1, 0)))  %>%
+  select(I_BC_VIV, CARENCIA_SERVSANITARIO)
+```
+
+La carencia del servicio sanitario es cercana al 48%:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_ReporteservSanit <- table(consulta_servSanit$CARENCIA_SERVSANITARIO, useNA = "always") %>% as.data.frame() %>% `names<-`(c("Carencia seervicio sanitario", "Frecuencia"))
+consulta_ReporteservSanit$porcentaje <- round(100 * consulta_ReporteservSanit$Frecuencia / sum(consulta_ReporteservSanit$Frecuencia), 2) 
+consulta_ReporteservSanit %>% flextable::flextable()
+```
+
+# Insumos energéticos: energía eléctrica y gas
+
+La carencia del hogar por insumos energéticos incluye la no tenencia de energía eléctrica:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P11_ENERGIA %>% var_label()
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+viviendas_etiquetas$P11_ENERGIA %>% val_labels()
+```
+
+Los hogares que no tengan energía electríca tienen carencia en esta dimensión:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_insumosEnergeticos<- viviendas %>% collect() %>% select(I_BC_VIV, P11_ENERGIA, P12_COMBUS) %>% 
+  mutate(carencia_electricidad = ifelse(P11_ENERGIA  == 5, 1, 0),
+         carencia_combustible = ifelse(P12_COMBUS %in% c(3:8), 1, 0),
+         CARENCIA_INSUMOSENERGETICOS = ifelse(carencia_electricidad == 1 | carencia_combustible == 1, 1, 0)
+         ) %>% 
+  select(I_BC_VIV, CARENCIA_INSUMOSENERGETICOS)
+```
+
+La carencia de insumos energéticos es cercana al 32%:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_ReporteinsumosEnergeticos <- table(consulta_insumosEnergeticos$CARENCIA_INSUMOSENERGETICOS, useNA = "always") %>% as.data.frame() %>% `names<-`(c("Carencia insumos energéticos", "Frecuencia"))
+consulta_ReporteinsumosEnergeticos$porcentaje <- round(100 * consulta_ReporteinsumosEnergeticos$Frecuencia / sum(consulta_ReporteinsumosEnergeticos$Frecuencia), 2) 
+consulta_ReporteinsumosEnergeticos %>% flextable::flextable()
+```
+
+# Carencia en educación
+
+Se considera carencia en educación si se satisfacen al menos una de las siguientes condiciones:
+Educación: a) Personas entre 7 y 16 años que no asisten a una unidad de educación
+formal; b) Alguna persona de 10 o más años que no sepa leer y escribir; c) Personas que
+no hayan aprobado determinado número de años, de acuerdo con su edad. https://repositorio.cepal.org/bitstream/handle/11362/4784/S0102117_es.pdf?sequence=1
+
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+var_label(personas_etiquetas$P36_ASISTE)
+```
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+val_labels(personas_etiquetas$P36_ASISTE)
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_asistencEscolar <- personas %>% select(I_BC_VIV, ID_BC_PERS, 
+                                                P37A_NIVEL, P37B_CURSO, P25_EDAD,
+                                                P36_ASISTE, P35_LEER) %>% collect() %>%
+                            mutate(ESCOLARIDAD = ifelse(P37A_NIVEL  == 1, 0,
+                                                 ifelse(P37A_NIVEL  == 2, 0,
+                            ifelse(P37A_NIVEL == 3, 0,
+                            ifelse(P37A_NIVEL == 4, P37B_CURSO,
+                            ifelse(P37A_NIVEL == 5, P37B_CURSO + 5,
+                            ifelse(P37A_NIVEL == 6, P37B_CURSO + 8,
+                            ifelse(P37A_NIVEL == 7, P37B_CURSO,
+                            ifelse(P37A_NIVEL == 8, P37B_CURSO + 8,
+                            ifelse(P37A_NIVEL == 9, P37B_CURSO,
+                            ifelse(P37A_NIVEL == 10, P37B_CURSO + 6,
+                            ifelse(P37A_NIVEL == 11, P37B_CURSO + 12,  
+                            ifelse(P37A_NIVEL == 12, P37B_CURSO + 12,
+                            ifelse(P37A_NIVEL == 13, P37B_CURSO + 16,
+                            ifelse(P37A_NIVEL == 14, P37B_CURSO + 18,
+                            ifelse(P37A_NIVEL == 15, P37B_CURSO + 12,
+                            ifelse(P37A_NIVEL == 16, P37B_CURSO + 12,
+                            ifelse(P37A_NIVEL == 17, P37B_CURSO + 12, NA)))))))))))))))))
+                            ) 
+```
+
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_asistencEscolar <- consulta_asistencEscolar %>% 
+mutate(rezago_escolar = as.numeric(P25_EDAD >= 6 & P25_EDAD <= 21 & 
+                                     P36_ASISTE == 1 &        
+                          ((P25_EDAD-ESCOLARIDAD) > 7)), 
+         CARENCIA_ASISESCOLAR = ifelse(
+           (P25_EDAD >= 7 & P25_EDAD <= 16 & P36_ASISTE %in% 4) |
+            (P25_EDAD >= 10 & P35_LEER == 2) |
+            rezago_escolar == 1, 1, 0)) %>%
+  select(I_BC_VIV, ID_BC_PERS, CARENCIA_ASISESCOLAR)
+```
+
+
+
+El cálculo de la carencia escolar se lleva a nivel de hogar:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_asistencEscolar_hog <- consulta_asistencEscolar %>% ungroup() %>% group_by(I_BC_VIV) %>%
+  summarise(CARENCIA_ASISESCOLAR = sum(CARENCIA_ASISESCOLAR))
+
+consulta_asistencEscolar_hog2 <- consulta_asistencEscolar_hog %>% mutate(CARENCIA_ASISESCOLAR = ifelse(CARENCIA_ASISESCOLAR >= 1, 1, 0))
+```
+Es una buena práctica liberar memoria después de una consulta larga:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+gc()
+```
+
+
+El indicador anterior se calcula a nivel de hogar, si al menos un miembro del hogar presenta carencia el hogar se considerará con carencia, cerca del 6,6 % de los hogares tienan estas carencias:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_ReporteasistencEscolar <- table(consulta_asistencEscolar$CARENCIA_ASISESCOLAR, 
+                                         useNA = "always") %>% as.data.frame() %>% 
+  `names<-`(c("Carencia asistencia escolar", "Frecuencia"))
+consulta_ReporteasistencEscolar$porcentaje <- round(100 * consulta_ReporteasistencEscolar$Frecuencia / sum(consulta_ReporteasistencEscolar$Frecuencia), 2) 
+consulta_ReporteasistencEscolar %>% flextable::flextable()
+```
+
+
+
+# CARENCIA SALUD
+
+Esta carencia se considera si los Hogares donde no se recibe atención médica, o se atienden en farmacias, medicina tradicional, o dependencias de ONG’s o Iglesia. Las variables a considerar son:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+personas_etiquetas$p28%>% val_labels()
+```
+
+
+* 28.A. Problemas de salud acude a: Caja de salud (CNS, COSSMIL, Otras)
+* 28.B. Problemas de salud acude a: Seguro de salud Privado
+* 28.C. Problemas de salud acude a: Establecimiento de salud Público
+* 28.D. Problemas de salud acude a: Establecimiento de salud Privado
+* 28.E. Problemas de salud acude a: Médico tradicional
+* 28.F. Problemas de salud acude a: Soluciones caseras
+* 28.G. Problemas de salud acude a: La farmacia o se automedica
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_salud <- personas %>% select(I_BC_VIV, ID_BC_PERS, P28A_CAJA, P28B_SEGPRIV,
+                                                      P28C_PUBLIC, P28D_PRIVAD, 
+                                                      P28E_TRADIC, P28F_CASERA, P28G_AUTOME) %>% 
+  collect() %>%
+  mutate(CARENCIA_SALUD = ifelse(P28A_CAJA == 2 & P28B_SEGPRIV == 2 & 
+                                 P28C_PUBLIC == 2 &
+                                P28D_PRIVAD == 2, 1, 0)) %>% 
+  select(I_BC_VIV, CARENCIA_SALUD)
+consulta_salud <- consulta_salud %>% 
+  group_by(I_BC_VIV) %>% 
+  summarise(CARENCIA_SALUD = sum(CARENCIA_SALUD)) %>%
+  mutate(CARENCIA_SALUD = as.numeric(CARENCIA_SALUD >= 1))
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+gc(reset = T)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_Reportesalud <- table(consulta_salud$CARENCIA_SALUD, 
+                                         useNA = "always") %>% as.data.frame() %>% 
+  `names<-`(c("Carencia salud", "Frecuencia"))
+consulta_Reportesalud$porcentaje <- round(100 * consulta_Reportesalud$Frecuencia / sum(consulta_Reportesalud$Frecuencia), 2) 
+consulta_Reportesalud %>% flextable::flextable()
+```
+
+
+
+
+## Precariedad ocupacional
+
+Se considera que un hogar tiene carencia en precariedad ocupacional si el jefe del hogar no tiene ningún nivel de instrucción y que tienen más de cuatro personas por miembro del hogar ocupado. Las variables consideradas son el parentesco (P23_PARENTES), en particular la opción 1 (jefe de hogar):
+
+Se evalúa también el nivel educativo: la variable P37_NIVEL (¿Cuál fue el nivel de estudios más alto que aprobó?) que toma las siguientes opciones:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+personas_etiquetas$P37A_NIVEL %>% val_labels()
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+Connsulta_jefeHogarSINEDUCA <- personas %>% select(I_BC_VIV, ID_BC_PERS, P23_PARENTES, P37A_NIVEL) %>% 
+  filter(P23_PARENTES == 1) %>%
+  mutate(jefehogNOeduc = ifelse(P37A_NIVEL %in% 1:3, 1, 0)) %>% 
+  select(I_BC_VIV, ID_BC_PERS, jefehogNOeduc) %>% collect()
+```
+
+Ahora revisaremos los hogares con más de 4 personas por miembro de hogar ocupado:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+# P25_EDAD
+# P39_TRABAJO
+# 39. Trabajó la semana pasada
+#  Si           No 
+#   1            2          
+
+# P41_BUSCO
+# 41. Buscó trabajo
+# val_labels(personas_etiquetas$P41_BUSCO)
+# Buscó trabajo habiendo trabajdo antes     Buscó trabajo por primera vez                     Estuvo estudiando 
+#                                     1                     2                                     3 
+#               Realizó labores de casa   Es jubilado, pensionista o rentista                                  Otra 
+#                                     4                                     5                                     6 
+
+gc(reset = T)
+consulta_ocupXpers <- personas %>% select(I_BC_VIV, URBRUR_P, P25_EDAD, P39_TRABAJO, P40_QUEHIZO,
+                                          P41_BUSCO) %>% collect() %>% 
+                      dplyr::mutate(
+                        PET = as.numeric((URBRUR_P == 1 &  P25_EDAD >= 14) |
+                   (URBRUR_P == 2 & P25_EDAD >= 14)),
+  PNET = 1 - PET,
+  Ocupados = as.numeric((PET == 1 & P39_TRABAJO  == 1) | 
+                       (PET == 1 & (P39_TRABAJO == 2 | is.na(P39_TRABAJO)) & 
+                          (P40_QUEHIZO %in% 1:4)))) %>%
+                       group_by(I_BC_VIV) %>%
+                       summarise(total_ocupados = sum(Ocupados, na.rm = T), 
+                                 numpers_hog = n()) %>%
+                       ungroup() %>%
+                       mutate(ocupXpers = total_ocupados / numpers_hog) 
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+gc(reset = TRUE)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_precariedadOcupacional <- right_join(consulta_ocupXpers, Connsulta_jefeHogarSINEDUCA, 
+                                 by = c("I_BC_VIV"))
+
+consulta_precariedadOcupacional <- consulta_precariedadOcupacional %>% 
+mutate(CARENCIA_PRECARIEDADOCUPACIONAL= as.numeric(ocupXpers <= 1/4 & 
+                                                   jefehogNOeduc == 1)) %>% 
+select(I_BC_VIV, CARENCIA_PRECARIEDADOCUPACIONAL)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_reportePrecariedadOcupacional <- table(consulta_precariedadOcupacional$CARENCIA_PRECARIEDADOCUPACIONAL, useNA = "always") %>% as.data.frame() %>% `names<-`(c("Carencia precariedad ocupac", "Frecuencia"))
+consulta_reportePrecariedadOcupacional$porcentaje <- round(100 * consulta_reportePrecariedadOcupacional$Frecuencia / sum(consulta_reportePrecariedadOcupacional$Frecuencia), 2) 
+consulta_reportePrecariedadOcupacional %>% flextable::flextable()
+```
+
+
+
+
+# NBI 
+
+Ahora integramos los indicadores del NBI:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+nrow(consulta_carenciaCalidadViv)
+nrow(consulta_hacinamiento)
+nrow(consulta_abastecAgua)
+nrow(consulta_servSanit)
+nrow(consulta_insumosEnergeticos)
+nrow(consulta_asistencEscolar)
+nrow(consulta_salud)
+nrow(consulta_precariedadOcupacional)
+```
+
+
+Integración de tablas
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_hogar_nbi <- inner_join(consulta_carenciaCalidadViv, consulta_hacinamiento)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_abastecAgua)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_servSanit)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_insumosEnergeticos)
+
+#consulta_asistencEscolar_hog$I_BC_VIV <- gsub("XX", "X", consulta_asistencEscolar_hog$I_BC_VIV)
+#consulta_salud$I_BC_VIV <- gsub("XX", "X", consulta_salud$I_BC_VIV)
+#consulta_precariedadOcupacional$I_BC_VIV <- gsub("XX", "X", consulta_precariedadOcupacional$I_BC_VIV)
+
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_asistencEscolar_hog)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_salud)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_precariedadOcupacional)
+#consulta_hogar_nbi$CARENCIA_ASISESCOLAR <- ifelse(is.na(consulta_hogar_nbi$CARENCIA_ASISESCOLAR), 
+                                                  
+
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+setwd("../output/2.IndicaroresCenso")
+saveRDS(consulta_hogar_nbi, "consulta_hogar_nbi.rds")
+```
+
+
+
+
+# Condiciones ocupacionales
+
+
+Las variables que se utilizaron en este módulo fueron:
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+var_label(personas_etiquetas$P39_TRABAJO)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+val_labels(personas_etiquetas$P39_TRABAJO)
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+var_label(personas_etiquetas$P40_QUEHIZO)
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+val_labels(personas_etiquetas$P40_QUEHIZO)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+var_label(personas_etiquetas$P41_BUSCO)
+```
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+val_labels(personas_etiquetas$P41_BUSCO)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+consulta_ocupac <- personas %>%
+select(I_BC_VIV, ID_BC_PERS, URBRUR_P, P25_EDAD, P39_TRABAJO, P40_QUEHIZO,  P41_BUSCO) %>%
+  collect() %>%
+mutate(
+  PET = as.numeric((URBRUR_P == 1 &  P25_EDAD >= 14) |
+                   (URBRUR_P == 2 & P25_EDAD >= 14)),
+  PNET = 1 - PET,
+  Ocupados = as.numeric((PET == 1 & P39_TRABAJO  == 1) | 
+                       (PET == 1 & (P39_TRABAJO == 2 | is.na(P39_TRABAJO)) & 
+                          (P40_QUEHIZO %in% 1:4))),
+  Desocupados = as.numeric(PET == 1 & (P39_TRABAJO == 2 | is.na(P39_TRABAJO)) &
+  P41_BUSCO %in% 1:2 & P40_QUEHIZO == 5),
+  PEA = as.numeric(Ocupados == 1 | Desocupados == 1),
+  Inactivos = as.numeric(PET == 1 & P39_TRABAJO == 2 & P41_BUSCO %in% 3:6)
+  )
+```
+
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+cat("total personas")
+sum(consulta_ocupac$Ocupados) + sum(consulta_ocupac$Desocupados) + 
+  sum(consulta_ocupac$Inactivos) + sum(consulta_ocupac$PNET)
+cat("total personas")
+nrow(consulta_ocupac)
+cat("Revisar si hay grupos mutuamente excluyentes")
+table(rowSums(consulta_ocupac[c("Ocupados", "Desocupados", "Inactivos", "PNET")]), 
+      useNA = "always")
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE}
+setwd("../output/2.IndicaroresCenso")
+saveRDS(consulta_ocupac, "consulta_ocupac.rds")
+```
+
+
+# Demograficas
+
+En caso de requerirse el análisis demográfico puede ejecutarse el siguiente código, (coloque eval = TRUE).
+
+```{r, warning=FALSE, message=FALSE, echo = FALSE, eval = FALSE}
+consulta_demog <- personas %>% mutate(edad_0_5 = ifelse(P25_EDAD < 5, 1, 0),
+                 edad_5_10 = ifelse(P25_EDAD >= 5 & P25_EDAD < 10, 1, 0),
+                 edad_10_15 = ifelse(P25_EDAD >= 10 & P25_EDAD < 15, 1, 0),                           edad_15_20 = ifelse(P25_EDAD >= 15 & P25_EDAD < 20, 1, 0),
+                 edad_20_25 = ifelse(P25_EDAD >= 20 & P25_EDAD < 25, 1, 0),
+                 edad_25_30 = ifelse(P25_EDAD >= 25 & P25_EDAD < 30, 1, 0),
+                 edad_30_35 = ifelse(P25_EDAD >= 30 & P25_EDAD < 35, 1, 0),
+                 edad_35_40 = ifelse(P25_EDAD >= 35 & P25_EDAD < 40, 1, 0),
+                 edad_40_45 = ifelse(P25_EDAD >= 40 & P25_EDAD < 45, 1, 0),
+                 edad_45_50 = ifelse(P25_EDAD >= 45 & P25_EDAD < 50, 1, 0),
+                 edad_50_55 = ifelse(P25_EDAD >= 50 & P25_EDAD < 55, 1, 0),
+                 edad_55_60 = ifelse(P25_EDAD >= 55 & P25_EDAD < 60, 1, 0),
+                 edad_60_65 = ifelse(P25_EDAD >= 60 & P25_EDAD < 65, 1, 0),
+                 edad_65_70 = ifelse(P25_EDAD >= 65 & P25_EDAD < 70, 1, 0),
+                 edad_70_75 = ifelse(P25_EDAD >= 70 & P25_EDAD < 75, 1, 0),
+                 edad_75_80 = ifelse(P25_EDAD >= 75 & P25_EDAD < 80, 1, 0),
+                 edad_80_85 = ifelse(P25_EDAD >= 80 & P25_EDAD < 85, 1, 0),
+                 edad_85Mas = ifelse(P25_EDAD >= 85, 1, 0),
+                 sexo_hombre = ifelse(P24_SEXO == 1, 1, 0)
+                                     
+                ) %>% select(I_BC_VIV, ID_BC_PERS, P25_EDAD, edad_5_10, edad_10_15,  edad_15_20, edad_20_25, edad_25_30, edad_30_35, edad_35_40, edad_40_45,
+                             edad_45_50, edad_50_55, edad_55_60, edad_60_65, edad_65_70, edad_70_75, edad_75_80,
+                             edad_80_85, edad_85Mas, sexo_hombre
+                             )
+```
+
+
+
+```{r,  eval = FALSE}
+setwd("../output/2.IndicaroresCenso")
+saveRDS(consulta_ocupac, "consulta_ocupac.rds")
+```
+
