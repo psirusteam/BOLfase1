@@ -82,7 +82,7 @@ m_icc50_varOcup <- matrix(,nrow = length(var_desmpleo), ncol = 3)
 for(i in 1:length(var_desmpleo)){
   m_icc50_varOcup[i,1] <- ICC(dplyr::filter(consulta_ocupac, 
                           URBRUR == 1)[[var_desmpleo[i]]], 
-                          cl = filter(consulta_ocupac, URBRUR == 1)$id_upm100)$ICC
+                          cl = filter(consulta_ocupac, URBRUR == 1)$id_upm50)$ICC
 }
 
 for(i in 1:length(var_desmpleo)){
@@ -132,12 +132,12 @@ row.names(m_icc100_varOcup) <- var_desmpleo
 Las matrices de correlación intraclásica para las variables de desocupación son:
 
 ```{r}
-m_icc_varOcup <- round(m_icc_varOcup, 2)
-m_icc50_varOcup <- round(m_icc50_varOcup, 2)
-m_icc100_varOcup <- round(m_icc100_varOcup, 2)
+m_icc_varOcup <- round(m_icc_varOcup, 3)
+m_icc50_varOcup <- round(m_icc50_varOcup, 3)
+m_icc100_varOcup <- round(m_icc100_varOcup, 3)
 ```
 
-Estas matrices se ensamblan en un úncio dataframe:
+Estas matrices se ensamblan en un único dataframe:
 
 ```{r}
 df_ICC_varOcup <- bind_rows(as.data.frame(m_icc_varOcup) %>% 
@@ -287,9 +287,9 @@ gc()
 Se unifican las correlaciones intraclásicas:
 
 ```{r}
-m_icc_nbi <- round(m_icc_nbi, 2)
-m_icc_nbi50 <- round(m_icc_nbi50, 2)
-m_icc_nbi100 <- round(m_icc_nbi100, 2)
+m_icc_nbi <- round(m_icc_nbi, 3)
+m_icc_nbi50 <- round(m_icc_nbi50, 3)
+m_icc_nbi100 <- round(m_icc_nbi100, 3)
 ```
 
 ```{r}
@@ -307,14 +307,11 @@ df_ICC$Escenario <- c(rep("Originales", 9),
 df_ICC <- arrange(df_ICC, Carencias, Escenario )
 ```
 
-```{r}
-names(df_ICC)[1] <- "Carencias"
-df_ICC <- arrange(df_ICC, Carencias)
-```   
-
 Se organizan con respecto a las variables, las UPM's originales, de tamaño 50 y tamaño 100.
 
 ```{r}
+names(df_ICC)[1] <- "Carencias"
+
 df_ICC <- df_ICC[c(1,3,2,4,6,5,  7, 9, 8,  10, 12, 11,  
                    13, 15, 14,  16, 18, 17, 
                    19, 21, 20,   22, 24, 23,  25, 27, 26),]
@@ -322,6 +319,7 @@ df_ICC <- df_ICC[c(1,3,2,4,6,5,  7, 9, 8,  10, 12, 11,
 
 # Tamaños
 Los tamaños de las UPMs resultantes son:
+
 ```{r}
 df_tamoriginal <- df_nbi %>% group_by(id_upm_inicial) %>% summarise(num_hogares = n())
 

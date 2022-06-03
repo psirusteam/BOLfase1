@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Calculo de indicadores"
 author: "José Fernando Zea"
 date: "21/2/2022"
 output: html_document
@@ -27,6 +27,7 @@ source("script_unionUPMS.r", encoding = "UTF-8")
 setwd("../output/2.IndicaroresCenso")
 consulta_hogar_nbi <- readRDS("consulta_hogar_nbi.rds")
 ```
+
 Calculo NBI:
 
 ```{r}
@@ -45,7 +46,7 @@ consulta_ocupac <- readRDS("consulta_ocupac.rds")
 Lectura archivo parquet de viviendas:
 
 ```{r, warning=FALSE, message=FALSE}
-setwd("../output/2.parquet")
+setwd("../output/1.parquet")
 viviendas <- open_dataset("viviendas") %>% collect()
 ```
 
@@ -58,8 +59,8 @@ gc(reset = T)
 
 ```{r}
 viviendasNBI <- inner_join(viviendas %>% select(I02_DEPTO, I03_PROV,
-                                            I04_MUN, I06_CIUCOM,  ID_UPM,URBRUR,
-                                            I_BC_VIV) , consulta_hogar_nbi, 
+                                            I04_MUN, I06_CIUCOM,  ID_UPM, URBRUR,
+                                            I_BC_VIV), consulta_hogar_nbi, 
                           by = "I_BC_VIV")
 
 con <- viviendasNBI %>% group_by(I02_DEPTO, I03_PROV,
@@ -67,6 +68,11 @@ con <- viviendasNBI %>% group_by(I02_DEPTO, I03_PROV,
        count()
 con$id_upm_inicial <- 1:nrow(con)
 mean(con$n)
+```
+Las estadísticas del número de viviendas por UPM se presenta a continuación:
+
+```{r}
+con %>% pull(n) %>% summary %>% unclass() %>% stack() 
 ```
 
 
