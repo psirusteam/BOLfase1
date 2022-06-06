@@ -17,7 +17,7 @@ library(samplesize4surveys)
 # Factor correlación intraclásica censo de escenario orignal a 50 a 100 UPM's
 
 ```{r}
-setwd("../output/4.CorIntraclasicaCenso")
+setwd("../output/4.CorIntralclasicaCenso/")
 df_ICC_varOcup <- readRDS("df_ICC_varOcup.rds")
 df_ICC_nbi <- readRDS("df_ICC.rds")
 ```
@@ -70,7 +70,6 @@ abline(modelo_ICC_100UPMs, xlab = "ICC escenario original",
 
 
 ```{r}
-windows()
 par(mfrow = c(1, 2))
 plot(y1 ~ x, pch = 20)
 abline(modelo_ICC_50UPMs, xlab = "ICC escenario original", ylab = "ICC (UPM tamaño 50)")
@@ -496,23 +495,4 @@ tablacostos_pobreza_extrema100 <- tablaMuestreo_pobrezaExtrema_100upms %>% mutat
   select(PSUinSample, HouseholdsPerPSU, deff = DEFF,TamUPM)
 tablaMuestreo_pobrezaExtrema_100upms$CostosAprox <- predict(modelo, tablacostos_pobreza_extrema100)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -177,7 +177,7 @@ gc(reset = T)
 Se guardar las correlaciones intraclásicas de las variables de ocupación
 
 ```{r}
-setwd("../output/4.CorIntraclasicaCenso")
+setwd("../output/4.CorIntralclasicaCenso/")
 saveRDS(consulta_ocupac, "consulta_ocupac.rds")
 saveRDS(df_ICC_varOcup, "df_ICC_varOcup.rds")
 ```
@@ -335,7 +335,7 @@ summary(df_tamano100$num_hogares)
 Se guardan los indicadores: 
 
 ```{r}
-setwd("../output/4.CorIntraclasicaCenso")
+setwd("../output/4.CorIntralclasicaCenso/")
 saveRDS(df_ICC, "df_ICC.rds")
 saveRDS(df_nbi, "df_nbi.rds")
 ```

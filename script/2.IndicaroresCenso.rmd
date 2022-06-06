@@ -136,7 +136,8 @@ Un número de personas de 2,5 personas por cuartos o más se considera una caren
 consulta_hacinamiento  <- viviendas %>% select(I_BC_VIV, P14_HABITAC, TOT_PER_VIV) %>%
                           mutate(hacinamiento = TOT_PER_VIV / P14_HABITAC,
                                 HACINAMIENTO = as.numeric(hacinamiento > 2.5)) %>%
-                           select(I_BC_VIV, HACINAMIENTO) %>% collect()
+                           select(I_BC_VIV, HACINAMIENTO) %>% collect %>% 
+  as.data.frame()
 ```
 
 
@@ -266,7 +267,7 @@ val_labels(personas_etiquetas$P36_ASISTE)
 
 ```{r, warning=FALSE, message=FALSE, echo = FALSE}
 consulta_asistencEscolar <- personas %>% select(I_BC_VIV, ID_BC_PERS, 
-                                                P37A_NIVEL, P37B_CURSO, P25_EDAD,
+                                                P37A_NIVEL, P37B_CURSO,P25_EDAD,
                                                 P36_ASISTE, P35_LEER) %>% collect() %>%
                             mutate(ESCOLARIDAD = ifelse(P37A_NIVEL  == 1, 0,
                                                  ifelse(P37A_NIVEL  == 2, 0,
@@ -284,7 +285,7 @@ consulta_asistencEscolar <- personas %>% select(I_BC_VIV, ID_BC_PERS,
                             ifelse(P37A_NIVEL == 14, P37B_CURSO + 18,
                             ifelse(P37A_NIVEL == 15, P37B_CURSO + 12,
                             ifelse(P37A_NIVEL == 16, P37B_CURSO + 12,
-                            ifelse(P37A_NIVEL == 17, P37B_CURSO + 12, NA)))))))))))))))))
+                            ifelse(P37A_NIVEL == 17, P37B_CURSO + 12, 0)))))))))))))))))
                             ) 
 ```
 
@@ -485,7 +486,7 @@ consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_insumosEnergeticos
 #consulta_salud$I_BC_VIV <- gsub("XX", "X", consulta_salud$I_BC_VIV)
 #consulta_precariedadOcupacional$I_BC_VIV <- gsub("XX", "X", consulta_precariedadOcupacional$I_BC_VIV)
 
-consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_asistencEscolar_hog)
+consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_asistencEscolar_hog2)
 consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_salud)
 consulta_hogar_nbi <- inner_join(consulta_hogar_nbi, consulta_precariedadOcupacional)
 #consulta_hogar_nbi$CARENCIA_ASISESCOLAR <- ifelse(is.na(consulta_hogar_nbi$CARENCIA_ASISESCOLAR), 

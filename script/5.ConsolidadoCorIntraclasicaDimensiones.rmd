@@ -20,7 +20,7 @@ library(dplyr)
 
 
 ```{r, warning=FALSE, message=FALSE}
-setwd("../output/4.CorIntraclasicaCenso")
+setwd("../output/4.CorIntralclasicaCenso/")
 df_nbi <- readRDS("df_nbi.rds")
 consulta_ocupac <- readRDS("consulta_ocupac.rds")
 ```
@@ -102,7 +102,7 @@ lista_estadisticas <- list(N_viv = N_viv,
 
 
 ```{r}
-setwd("../output/5.ConsolidadoCorIntraclasicaDimensiones")
+setwd("../output/5_ConsolidadoCorIntraclasicaDimensiones/")
 saveRDS(datos_propor_dimNBI, "datos_propor_dimNBI.rds")
 saveRDS(datos_propor_ocup, "datos_propor_ocup.rds")
 saveRDS(lista_estadisticas, "lista_estadisticas.rds")
